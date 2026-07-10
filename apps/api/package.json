@@ -17,11 +17,13 @@
     "@nestjs/common": "latest",
     "@nestjs/config": "latest",
     "@nestjs/core": "latest",
+    "@nestjs/jwt": "^11.0.2",
     "@nestjs/platform-express": "latest",
     "bullmq": "latest",
     "ioredis": "latest",
     "reflect-metadata": "latest",
-    "rxjs": "latest"
+    "rxjs": "latest",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@nestjs/cli": "latest",

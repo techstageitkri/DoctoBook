@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import {
   ClinicAssociationStatus,
+  DoctorStatus,
   PermissionEffect,
   ScopeType,
   UserStatus
@@ -85,7 +86,7 @@ export class AuthorizationService {
       return true;
     }
 
-    return this.isRoleScopeAllowed(user.id, roleCodes, resolvedTarget);
+    return this.isRoleScopeAllowed(user.id, roleCodes, resolvedTarget, permissionCode);
   }
 
   private async getExplicitPermissionDecision(
@@ -145,7 +146,12 @@ export class AuthorizationService {
     return scopes;
   }
 
-  private async isRoleScopeAllowed(userId: string, roleCodes: string[], target: ResolvedTarget) {
+  private async isRoleScopeAllowed(
+    userId: string,
+    roleCodes: string[],
+    target: ResolvedTarget,
+    permissionCode: string
+  ) {
     if (target.scope === "self") {
       return target.selfUserId === userId;
     }
@@ -169,11 +175,11 @@ export class AuthorizationService {
     }
 
     if (roleCodes.includes("doctor") && target.doctorId) {
-      return this.isDoctorUser(userId, target.doctorId);
+      return this.isDoctorUser(userId, target.doctorId, permissionCode);
     }
 
     if (roleCodes.includes("doctor") && target.doctorClinicId) {
-      return this.isDoctorUserForDoctorClinic(userId, target.doctorClinicId);
+      return this.isDoctorUserForDoctorClinic(userId, target.doctorClinicId, permissionCode);
     }
 
     if (roleCodes.includes("patient") && target.patientId) {
@@ -329,26 +335,41 @@ export class AuthorizationService {
     );
   }
 
-  private async isDoctorUser(userId: string, doctorId: string) {
+  private async isDoctorUser(userId: string, doctorId: string, permissionCode: string) {
     const doctor = await this.prisma.doctor.findUnique({
       where: { id: doctorId },
-      select: { userId: true }
+      select: { userId: true, status: true }
     });
 
-    return doctor?.userId === userId;
+    return doctor?.userId === userId && this.isDoctorStatusAllowed(doctor.status, permissionCode);
   }
 
-  private async isDoctorUserForDoctorClinic(userId: string, doctorClinicId: string) {
+  private async isDoctorUserForDoctorClinic(
+    userId: string,
+    doctorClinicId: string,
+    permissionCode: string
+  ) {
     const doctorClinic = await this.prisma.doctorClinic.findUnique({
       where: { id: doctorClinicId },
       select: {
         doctor: {
-          select: { userId: true }
+          select: { userId: true, status: true }
         }
       }
     });
 
-    return doctorClinic?.doctor.userId === userId;
+    return (
+      doctorClinic?.doctor.userId === userId &&
+      this.isDoctorStatusAllowed(doctorClinic.doctor.status, permissionCode)
+    );
+  }
+
+  private isDoctorStatusAllowed(status: DoctorStatus, permissionCode: string) {
+    if (permissionCode.startsWith("availability.") || permissionCode.startsWith("appointment.")) {
+      return status === DoctorStatus.APPROVED;
+    }
+
+    return status !== DoctorStatus.SUSPENDED;
   }
 
   private async isPatientUser(userId: string, patientId: string) {

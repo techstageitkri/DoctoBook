@@ -363,19 +363,13 @@ export class AuthService {
         throw new BadRequestException("Invalid verification token");
       }
 
-      const doctor = await tx.doctor.findUnique({
-        where: { userId: verificationToken.user.id },
-        select: { id: true }
-      });
-      const nextStatus = doctor ? UserStatus.PENDING_APPROVAL : UserStatus.ACTIVE;
-
       const user = await tx.user.update({
         where: { id: verificationToken.user.id },
         data: {
           emailVerifiedAt: new Date(),
           status:
             verificationToken.user.status === UserStatus.PENDING_VERIFICATION
-              ? nextStatus
+              ? UserStatus.ACTIVE
               : verificationToken.user.status
         },
         select: {

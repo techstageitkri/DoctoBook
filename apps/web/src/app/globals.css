@@ -106,6 +106,28 @@ button:disabled {
   padding: 28px;
 }
 
+.doctor-workspace {
+  display: grid;
+  gap: 18px;
+  padding-top: 10px;
+}
+
+.section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid #d7ddd9;
+  padding-top: 24px;
+}
+
+.section-heading h2 {
+  margin: 0;
+  color: #17221d;
+  font-size: 22px;
+  letter-spacing: 0;
+}
+
 .topbar,
 .auth-strip,
 .detail-band,
@@ -355,6 +377,23 @@ tbody tr:hover,
   color: #a62a20;
 }
 
+.status-pending_approval,
+.status-pending {
+  background: #fff7e2;
+  color: #9a6700;
+}
+
+.status-approved {
+  background: #e5f4ef;
+  color: #0b735e;
+}
+
+.status-rejected,
+.status-removed {
+  background: #fff3f1;
+  color: #a62a20;
+}
+
 .small-pill {
   background: #eef0f7;
   color: #485089;
@@ -448,6 +487,32 @@ tbody tr:hover,
   font-size: 13px;
 }
 
+.profile-summary {
+  display: grid;
+  gap: 6px;
+  border: 1px solid #dbe2de;
+  border-radius: 8px;
+  background: #f8faf9;
+  padding: 12px;
+}
+
+.profile-summary strong {
+  color: #17221d;
+  font-size: 14px;
+}
+
+.profile-summary span {
+  overflow-wrap: anywhere;
+  color: #65716a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.association-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
 .empty-state {
   display: block;
   border: 1px dashed #cbd4cf;
@@ -487,6 +552,7 @@ tbody tr:hover,
   .auth-strip,
   .detail-band,
   .metric,
+  .section-heading,
   .detail-summary {
     align-items: stretch;
     flex-direction: column;
@@ -509,5 +575,9 @@ tbody tr:hover,
   th,
   td {
     padding: 11px 8px;
+  }
+
+  .association-row {
+    grid-template-columns: 1fr;
   }
 }

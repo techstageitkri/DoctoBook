@@ -4,9 +4,10 @@ import { AuthModule } from "./auth/auth.module.js";
 import { AuthorizationModule } from "./authorization/authorization.module.js";
 import { ClinicModule } from "./clinics/clinic.module.js";
 import { DatabaseModule } from "./database/database.module.js";
+import { DoctorModule } from "./doctors/doctor.module.js";
 
 @Module({
-  imports: [DatabaseModule, AuthModule, AuthorizationModule, ClinicModule],
+  imports: [DatabaseModule, AuthModule, AuthorizationModule, ClinicModule, DoctorModule],
   controllers: [AppController]
 })
 export class AppModule {}

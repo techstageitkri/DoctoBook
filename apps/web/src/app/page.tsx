@@ -1,10 +1,11 @@
 import { APP_NAME } from "@doctobook/shared";
+import { ClinicAdminPortal } from "./clinic-admin-portal";
 
 export default function HomePage() {
   return (
-    <main style={{ minHeight: "100vh", padding: "48px" }}>
-      <h1>{APP_NAME}</h1>
-      <p>Implementation foundation is ready.</p>
-    </main>
+    <ClinicAdminPortal
+      apiUrl={process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000"}
+      appName={APP_NAME}
+    />
   );
 }

@@ -1,0 +1,27 @@
+{
+  "name": "doctobook",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.7.0",
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev --parallel",
+    "lint": "turbo lint",
+    "test": "turbo test",
+    "typecheck": "turbo typecheck",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md,yml,yaml}\"",
+    "db:generate": "pnpm --filter @doctobook/database prisma:generate",
+    "db:migrate": "pnpm --filter @doctobook/database prisma:migrate",
+    "db:seed": "pnpm --filter @doctobook/database prisma:seed"
+  },
+  "devDependencies": {
+    "@eslint/js": "latest",
+    "@types/node": "latest",
+    "eslint": "latest",
+    "prettier": "latest",
+    "turbo": "latest",
+    "typescript-eslint": "latest",
+    "typescript": "5.9.3",
+    "vitest": "latest"
+  }
+}

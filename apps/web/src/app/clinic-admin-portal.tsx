@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { DoctorOnboardingPanel } from "./doctor-onboarding-panel";
+import { ServiceConfigurationPanel } from "./service-configuration-panel";
 
 type ClinicStatus = "DRAFT" | "PENDING_APPROVAL" | "ACTIVE" | "SUSPENDED" | "CLOSED";
 type PaymentMode = "ONLINE_REQUIRED" | "PAY_AT_CLINIC" | "ONLINE_OPTIONAL";
@@ -481,6 +482,9 @@ export function ClinicAdminPortal({ apiUrl, appName }: { apiUrl: string; appName
           </a>
           <a className="nav-item" href="#doctors">
             Doctors
+          </a>
+          <a className="nav-item" href="#services">
+            Services
           </a>
         </nav>
       </aside>
@@ -988,6 +992,11 @@ export function ClinicAdminPortal({ apiUrl, appName }: { apiUrl: string; appName
         </section>
 
         <DoctorOnboardingPanel apiUrl={apiUrl} accessToken={accessToken} />
+        <ServiceConfigurationPanel
+          apiUrl={apiUrl}
+          accessToken={accessToken}
+          selectedClinicId={selectedClinicId}
+        />
       </section>
     </main>
   );

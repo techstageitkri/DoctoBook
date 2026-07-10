@@ -106,7 +106,8 @@ button:disabled {
   padding: 28px;
 }
 
-.doctor-workspace {
+.doctor-workspace,
+.service-workspace {
   display: grid;
   gap: 18px;
   padding-top: 10px;

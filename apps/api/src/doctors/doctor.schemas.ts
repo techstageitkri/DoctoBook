@@ -69,6 +69,10 @@ export const requestClinicAssociationSchema = z.strictObject({
   bufferMinutes: z.number().int().min(0).max(240).default(0)
 });
 
+export const assignDoctorToClinicSchema = requestClinicAssociationSchema.omit({ clinicId: true }).extend({
+  doctorId: uuidSchema
+});
+
 export const associationDecisionSchema = z.strictObject({
   reason: z.string().trim().min(1).max(1000).optional()
 });
@@ -99,6 +103,7 @@ export type ListDoctorsQuery = z.infer<typeof listDoctorsQuerySchema>;
 export type RejectDoctorInput = z.infer<typeof rejectDoctorSchema>;
 export type DoctorStatusReasonInput = z.infer<typeof doctorStatusReasonSchema>;
 export type RequestClinicAssociationInput = z.infer<typeof requestClinicAssociationSchema>;
+export type AssignDoctorToClinicInput = z.infer<typeof assignDoctorToClinicSchema>;
 export type AssociationDecisionInput = z.infer<typeof associationDecisionSchema>;
 export type InviteDoctorInput = z.infer<typeof inviteDoctorSchema>;
 export type ClinicDocumentReviewInput = z.infer<typeof clinicDocumentReviewSchema>;

@@ -261,6 +261,67 @@ describeDatabase("doctor onboarding integration", () => {
     expect(refreshedDoctor.status).toBe(DoctorStatus.APPROVED);
   });
 
+  it("allows an authorized admin to assign an approved doctor directly to a clinic", async () => {
+    const registration = await registerVerifiedDoctor("admin-assignment");
+    const clinic = await createClinicWithLocation("admin-assignment");
+
+    await expect(
+      doctors.assignDoctorToClinic(
+        superAdmin,
+        clinic.clinicId,
+        {
+          doctorId: registration.doctor.id,
+          clinicLocationId: clinic.locationId,
+          currency: "LKR",
+          defaultSlotIntervalMinutes: 15,
+          bufferMinutes: 0
+        },
+        context
+      )
+    ).rejects.toThrow("Doctor identity must be approved first");
+
+    await doctors.approveDoctor(superAdmin, registration.doctor.id, context);
+    const assigned = await doctors.assignDoctorToClinic(
+      superAdmin,
+      clinic.clinicId,
+      {
+        doctorId: registration.doctor.id,
+        clinicLocationId: clinic.locationId,
+        defaultConsultationFeeMinor: 250000,
+        currency: "LKR",
+        paymentMode: PaymentMode.PAY_AT_CLINIC,
+        defaultSlotIntervalMinutes: 15,
+        bufferMinutes: 0
+      },
+      context
+    );
+
+    expect(assigned).toEqual(
+      expect.objectContaining({
+        doctorId: registration.doctor.id,
+        clinicId: clinic.clinicId,
+        clinicLocationId: clinic.locationId,
+        status: ClinicAssociationStatus.APPROVED
+      })
+    );
+
+    const repeated = await doctors.assignDoctorToClinic(
+      superAdmin,
+      clinic.clinicId,
+      {
+        doctorId: registration.doctor.id,
+        clinicLocationId: clinic.locationId,
+        currency: "LKR",
+        defaultSlotIntervalMinutes: 20,
+        bufferMinutes: 0
+      },
+      context
+    );
+
+    expect(repeated.id).toBe(assigned.id);
+    expect(repeated.defaultSlotIntervalMinutes).toBe(20);
+  });
+
   it("validates document ownership for clinic-scoped document reviews", async () => {
     const registration = await registerVerifiedDoctor("document-owner");
     const otherRegistration = await registerVerifiedDoctor("document-owner-other");

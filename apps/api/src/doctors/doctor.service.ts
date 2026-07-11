@@ -7,6 +7,7 @@ import {
 } from "@nestjs/common";
 import {
   ClinicAssociationStatus,
+  ClinicStatus,
   DoctorStatus,
   FileVisibility,
   Prisma,
@@ -24,6 +25,7 @@ import { NotificationService } from "../notifications/notification.service.js";
 import { SlotQueueService } from "../slots/slot-queue.service.js";
 import {
   AssociationDecisionInput,
+  AssignDoctorToClinicInput,
   ClinicDocumentReviewInput,
   CreateDoctorDocumentInput,
   DoctorStatusReasonInput,
@@ -646,6 +648,94 @@ export class DoctorService {
     });
 
     return this.serialize({ associations });
+  }
+
+  async assignDoctorToClinic(
+    actor: AuthenticatedUser,
+    clinicId: string,
+    input: AssignDoctorToClinicInput,
+    context: RequestContext
+  ) {
+    await this.assertCan(actor, "doctor_clinic.approve", "clinic", clinicId);
+
+    const [doctor, clinic, location, existing] = await Promise.all([
+      this.prisma.doctor.findFirst({
+        where: { id: input.doctorId, deletedAt: null },
+        select: { id: true, status: true }
+      }),
+      this.prisma.clinic.findFirst({
+        where: { id: clinicId, deletedAt: null },
+        select: { id: true, status: true }
+      }),
+      this.prisma.clinicLocation.findFirst({
+        where: { id: input.clinicLocationId, clinicId, deletedAt: null },
+        select: { id: true, status: true }
+      }),
+      this.prisma.doctorClinic.findFirst({
+        where: {
+          doctorId: input.doctorId,
+          clinicId,
+          clinicLocationId: input.clinicLocationId
+        },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, status: true, deletedAt: true }
+      })
+    ]);
+
+    if (!doctor) {
+      throw new NotFoundException("Doctor not found");
+    }
+
+    if (doctor.status !== DoctorStatus.APPROVED) {
+      throw new ConflictException("Doctor identity must be approved first");
+    }
+
+    if (!clinic || clinic.status !== ClinicStatus.ACTIVE) {
+      throw new ConflictException("Clinic must be active");
+    }
+
+    if (!location || location.status !== ClinicStatus.ACTIVE) {
+      throw new BadRequestException("Select an active location belonging to the clinic");
+    }
+
+    const data = {
+      doctorId: doctor.id,
+      clinicId,
+      clinicLocationId: location.id,
+      status: ClinicAssociationStatus.APPROVED,
+      defaultConsultationFeeMinor:
+        input.defaultConsultationFeeMinor === null || input.defaultConsultationFeeMinor === undefined
+          ? null
+          : BigInt(input.defaultConsultationFeeMinor),
+      currency: input.currency,
+      paymentMode: input.paymentMode,
+      defaultSlotIntervalMinutes: input.defaultSlotIntervalMinutes,
+      bufferMinutes: input.bufferMinutes,
+      approvedByUserId: actor.id,
+      approvedAt: new Date(),
+      deletedAt: null
+    };
+
+    const association = existing
+      ? await this.prisma.doctorClinic.update({
+          where: { id: existing.id },
+          data,
+          include: this.associationInclude(true)
+        })
+      : await this.prisma.doctorClinic.create({
+          data,
+          include: this.associationInclude(true)
+        });
+
+    await this.auditAssociationDecision(actor, association.id, "doctor_clinic.approve", context, {
+      assignedByAdmin: true,
+      previousStatus: existing?.status ?? null
+    });
+    await this.slotQueueService.enqueueAssociation(association.id, {
+      reason: "doctor_clinic_changed"
+    });
+
+    return this.serialize(association);
   }
 
   async approveClinicAssociation(

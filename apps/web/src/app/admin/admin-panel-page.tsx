@@ -25,7 +25,7 @@ export function AdminPanelPage({ section }: { section: Section }) {
   const { apiUrl, accessToken } = useAdminSession();
   const [clinics, setClinics] = useState<Clinic[]>([]);
   const [selectedClinicId, setSelectedClinicId] = useState("");
-  const needsClinic = section === "services" || section === "availability" || section === "appointments";
+  const needsClinic = section === "doctors" || section === "services" || section === "availability" || section === "appointments";
   const heading = titles[section];
 
   useEffect(() => {
@@ -57,7 +57,7 @@ export function AdminPanelPage({ section }: { section: Section }) {
           </label>
         )}
       </header>
-      {section === "doctors" && <DoctorOnboardingPanel apiUrl={apiUrl} accessToken={accessToken} />}
+      {section === "doctors" && <DoctorOnboardingPanel apiUrl={apiUrl} accessToken={accessToken} selectedClinicId={selectedClinicId} />}
       {section === "services" && <ServiceConfigurationPanel apiUrl={apiUrl} accessToken={accessToken} selectedClinicId={selectedClinicId} />}
       {section === "availability" && <DoctorAvailabilityPanel apiUrl={apiUrl} accessToken={accessToken} selectedClinicId={selectedClinicId} />}
       {section === "appointments" && <AppointmentOperationsPanel apiUrl={apiUrl} accessToken={accessToken} selectedClinicId={selectedClinicId} />}

@@ -65,6 +65,14 @@ type Association = {
   doctor?: Doctor;
 };
 
+type ClinicLocation = {
+  id: string;
+  name: string | null;
+  address: string;
+  city: string;
+  status: string;
+};
+
 type DoctorRegistrationForm = {
   email: string;
   fullName: string;
@@ -91,10 +99,12 @@ const defaultDoctorForm: DoctorRegistrationForm = {
 
 export function DoctorOnboardingPanel({
   apiUrl,
-  accessToken
+  accessToken,
+  selectedClinicId
 }: {
   apiUrl: string;
   accessToken: string;
+  selectedClinicId: string;
 }) {
   const [doctorToken, setDoctorToken] = useState("");
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
@@ -107,6 +117,8 @@ export function DoctorOnboardingPanel({
   const [clinicLocationId, setClinicLocationId] = useState("");
   const [associationClinicId, setAssociationClinicId] = useState("");
   const [associations, setAssociations] = useState<Association[]>([]);
+  const [clinicLocations, setClinicLocations] = useState<ClinicLocation[]>([]);
+  const [assignmentLocationId, setAssignmentLocationId] = useState("");
   const [documentKey, setDocumentKey] = useState("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -126,6 +138,40 @@ export function DoctorOnboardingPanel({
 
     void loadSpecialties();
   }, []);
+
+  useEffect(() => {
+    if (accessToken) {
+      void handleLoadDoctors();
+    }
+  }, [accessToken]);
+
+  useEffect(() => {
+    setAssociationClinicId(selectedClinicId);
+    setAssociations([]);
+
+    if (!selectedClinicId || !accessToken) {
+      setClinicLocations([]);
+      setAssignmentLocationId("");
+      return;
+    }
+
+    void tokenRequest<{ locations: ClinicLocation[] }>(
+      `/v1/clinics/${selectedClinicId}/locations`,
+      accessToken
+    )
+      .then((response) => {
+        const activeLocations = response.locations.filter((location) =>
+          location.status.toLowerCase() === "active"
+        );
+        setClinicLocations(activeLocations);
+        setAssignmentLocationId(activeLocations[0]?.id ?? "");
+      })
+      .catch(() => {
+        setClinicLocations([]);
+        setAssignmentLocationId("");
+      });
+    void loadClinicAssociations(selectedClinicId);
+  }, [accessToken, selectedClinicId]);
 
   useEffect(() => {
     if (doctorToken) {
@@ -352,11 +398,11 @@ export function DoctorOnboardingPanel({
     }, `Doctor ${action} completed`);
   }
 
-  async function handleLoadAssociations() {
+  async function loadClinicAssociations(clinicIdToLoad: string) {
     const response = await runAction(
       () =>
         tokenRequest<{ associations: Association[] }>(
-          `/v1/clinics/${associationClinicId}/doctor-associations`,
+          `/v1/clinics/${clinicIdToLoad}/doctor-associations`,
           accessToken
         ),
       "Clinic associations loaded"
@@ -365,6 +411,10 @@ export function DoctorOnboardingPanel({
     if (response) {
       setAssociations(response.associations);
     }
+  }
+
+  async function handleLoadAssociations() {
+    await loadClinicAssociations(associationClinicId);
   }
 
   async function handleAssociationDecision(associationId: string, action: "approve" | "reject") {
@@ -382,6 +432,30 @@ export function DoctorOnboardingPanel({
       );
       await handleLoadAssociations();
     }, `Association ${action} completed`);
+  }
+
+  async function handleAssignDoctor(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!selectedDoctor || !selectedClinicId || !assignmentLocationId) {
+      setError("Select an approved doctor, clinic, and location");
+      return;
+    }
+
+    await runAction(async () => {
+      await tokenRequest(`/v1/clinics/${selectedClinicId}/doctor-associations`, accessToken, {
+        method: "POST",
+        body: JSON.stringify({
+          doctorId: selectedDoctor.id,
+          clinicLocationId: assignmentLocationId,
+          currency: "LKR",
+          defaultSlotIntervalMinutes: 15,
+          bufferMinutes: 0
+        })
+      });
+      await handleLoadAssociations();
+      await handleLoadDoctors();
+    }, "Doctor assigned to clinic and approved");
   }
 
   return (
@@ -542,6 +616,68 @@ export function DoctorOnboardingPanel({
               <span>{myProfile.licenseNumber}</span>
             </div>
           )}
+        </div>
+      </section>
+
+      <section className="content-grid">
+        <form className="panel form-panel" onSubmit={handleAssignDoctor}>
+          <div className="panel-header">
+            <h3>Assign doctor to clinic</h3>
+            <span>Required for public search</span>
+          </div>
+          <div className="profile-summary">
+            <strong>{selectedDoctor?.user.fullName ?? "Select a doctor above"}</strong>
+            <span>
+              {selectedDoctor?.status === "APPROVED"
+                ? "Identity approved"
+                : "Approve the doctor identity before assignment"}
+            </span>
+          </div>
+          <Field label="Clinic location">
+            <select
+              disabled={!selectedClinicId}
+              onChange={(event) => setAssignmentLocationId(event.target.value)}
+              value={assignmentLocationId}
+            >
+              <option value="">Select a location</option>
+              {clinicLocations.map((location) => (
+                <option key={location.id} value={location.id}>
+                  {location.name ?? "Location"} - {location.city}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <button
+            className="primary-button"
+            disabled={
+              !selectedDoctor ||
+              selectedDoctor.status !== "APPROVED" ||
+              !assignmentLocationId ||
+              isLoading
+            }
+            type="submit"
+          >
+            Assign and approve
+          </button>
+          <p className="form-help">
+            After assignment, configure at least one active service and availability schedule to
+            make the doctor bookable.
+          </p>
+        </form>
+
+        <div className="panel">
+          <div className="panel-header">
+            <h3>Public listing readiness</h3>
+          </div>
+          <div className="readiness-list">
+            <span className={selectedDoctor?.status === "APPROVED" ? "ready" : "pending"}>
+              Doctor identity approved
+            </span>
+            <span className={associations.some((item) => item.doctor?.id === selectedDoctor?.id && item.status === "APPROVED") ? "ready" : "pending"}>
+              Active clinic association
+            </span>
+            <span className="pending">Service and availability configured on their respective pages</span>
+          </div>
         </div>
       </section>
 

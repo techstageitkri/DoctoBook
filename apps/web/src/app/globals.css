@@ -346,6 +346,47 @@ button {
   color: #a62a20;
 }
 
+.form-help {
+  margin: 0;
+  color: #68736d;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.readiness-list {
+  display: grid;
+  gap: 10px;
+}
+
+.readiness-list span {
+  position: relative;
+  border-bottom: 1px solid #e3e8e5;
+  color: #68736d;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 10px 10px 10px 30px;
+}
+
+.readiness-list span::before {
+  position: absolute;
+  top: 15px;
+  left: 8px;
+  width: 8px;
+  height: 8px;
+  border: 2px solid #95a19a;
+  border-radius: 50%;
+  content: "";
+}
+
+.readiness-list span.ready {
+  color: #0b735e;
+}
+
+.readiness-list span.ready::before {
+  border-color: #0d7f68;
+  background: #0d7f68;
+}
+
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

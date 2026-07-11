@@ -16,6 +16,7 @@ import { AccessTokenGuard } from "../auth/access-token.guard.js";
 import { RequestContext, RequestWithUser } from "../auth/auth.types.js";
 import {
   associationDecisionSchema,
+  assignDoctorToClinicSchema,
   clinicDocumentReviewSchema,
   createDoctorDocumentSchema,
   doctorStatusReasonSchema,
@@ -175,6 +176,21 @@ export class DoctorController {
     return this.doctorService.removeMyAssociation(
       this.requireUser(request),
       associationId,
+      this.getRequestContext(request)
+    );
+  }
+
+  @UseGuards(AccessTokenGuard)
+  @Post("clinics/:clinicId/doctor-associations")
+  assignDoctorToClinic(
+    @Param("clinicId") clinicId: string,
+    @Body() body: unknown,
+    @Req() request: RequestWithUser
+  ) {
+    return this.doctorService.assignDoctorToClinic(
+      this.requireUser(request),
+      clinicId,
+      this.parseBody(assignDoctorToClinicSchema, body),
       this.getRequestContext(request)
     );
   }

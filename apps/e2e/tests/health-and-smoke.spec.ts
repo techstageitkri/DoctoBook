@@ -26,7 +26,7 @@ test.describe("production smoke checks", () => {
     await page.goto("/");
     await expect(page).toHaveTitle(/DoctoBook/u);
     await expect(page.getByRole("heading", { name: /DoctoBook/u })).toBeVisible();
-    await expect(page.getByRole("button", { name: /^Search$/u })).toBeVisible();
+    await expect(page.getByRole("main").getByRole("button", { name: /^Search$/u })).toBeVisible();
   });
 
   test("public marketplace APIs return stable response shapes without sensitive fields", async ({

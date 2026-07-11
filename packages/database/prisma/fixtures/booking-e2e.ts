@@ -36,8 +36,17 @@ const fixture = {
   timezone: "Asia/Colombo"
 } as const;
 
+const onlineFixture = {
+  serviceCode: "E2E_ONLINE_CONSULTATION",
+  serviceSlug: "e2e-online-consultation",
+  serviceName: "E2E Online Consultation",
+  feeMinor: 10000n,
+  currency: "LKR"
+} as const;
+
 const colomboOffsetMinutes = 330;
 const slotLocalHours = [10, 10.5, 11, 11.5] as const;
+const onlineSlotLocalHours = [14, 14.5, 15, 15.5] as const;
 const blockingAppointmentStatuses = [
   AppointmentStatus.PENDING_PAYMENT,
   AppointmentStatus.CONFIRMED,
@@ -69,9 +78,9 @@ async function createFixture() {
   const doctorRole = await requireRole("doctor");
   const now = new Date();
   const slotPlan = buildSlotPlan(now);
-  const primaryBookingDate = slotPlan[0]?.localDate;
+  const onlineSlotPlan = buildSlotPlan(now, onlineSlotLocalHours);
 
-  if (!primaryBookingDate) {
+  if (!slotPlan[0] || !onlineSlotPlan[0]) {
     throw new Error("Unable to compute fixture slots");
   }
 
@@ -209,12 +218,64 @@ async function createFixture() {
     await replaceDoctorAvailability(tx, doctorClinic.id);
     const doctorClinicService = await upsertDoctorClinicService(tx, {
       doctorClinicId: doctorClinic.id,
-      clinicServiceId: clinicService.id
+      clinicServiceId: clinicService.id,
+      feeMinor: fixture.feeMinor,
+      currency: fixture.currency,
+      paymentMode: PaymentMode.PAY_AT_CLINIC
     });
     const slotResult = await refreshSlots(tx, {
       doctorClinicId: doctorClinic.id,
       doctorClinicServiceId: doctorClinicService.id,
       slotPlan,
+      now
+    });
+    const onlineService = await tx.service.upsert({
+      where: { slug: onlineFixture.serviceSlug },
+      update: {
+        name: onlineFixture.serviceName,
+        description: "Stable online service for PayHere staging E2E.",
+        defaultDurationMinutes: fixture.durationMinutes,
+        isActive: true
+      },
+      create: {
+        name: onlineFixture.serviceName,
+        slug: onlineFixture.serviceSlug,
+        description: "Stable online service for PayHere staging E2E.",
+        defaultDurationMinutes: fixture.durationMinutes,
+        isActive: true
+      }
+    });
+    const onlineClinicService = await tx.clinicService.upsert({
+      where: {
+        clinicId_serviceId: {
+          clinicId: clinic.id,
+          serviceId: onlineService.id
+        }
+      },
+      update: {
+        displayName: onlineFixture.serviceName,
+        description: "Stable online clinic service for PayHere staging E2E.",
+        isActive: true
+      },
+      create: {
+        clinicId: clinic.id,
+        serviceId: onlineService.id,
+        displayName: onlineFixture.serviceName,
+        description: "Stable online clinic service for PayHere staging E2E.",
+        isActive: true
+      }
+    });
+    const onlineDoctorClinicService = await upsertDoctorClinicService(tx, {
+      doctorClinicId: doctorClinic.id,
+      clinicServiceId: onlineClinicService.id,
+      feeMinor: onlineFixture.feeMinor,
+      currency: onlineFixture.currency,
+      paymentMode: PaymentMode.ONLINE_REQUIRED
+    });
+    const onlineSlotResult = await refreshSlots(tx, {
+      doctorClinicId: doctorClinic.id,
+      doctorClinicServiceId: onlineDoctorClinicService.id,
+      slotPlan: onlineSlotPlan,
       now
     });
 
@@ -224,10 +285,16 @@ async function createFixture() {
       clinic,
       location,
       service,
+      onlineService,
       doctorClinic,
       doctorClinicService,
+      onlineDoctorClinicService,
+      firstAvailableBookingDate: slotResult.firstAvailableBookingDate,
       availableSlotCount: slotResult.availableSlotCount,
-      generatedSlotCount: slotResult.generatedSlotCount
+      generatedSlotCount: slotResult.generatedSlotCount,
+      onlineFirstAvailableBookingDate: onlineSlotResult.firstAvailableBookingDate,
+      onlineAvailableSlotCount: onlineSlotResult.availableSlotCount,
+      onlineGeneratedSlotCount: onlineSlotResult.generatedSlotCount
     };
   });
 
@@ -245,9 +312,21 @@ async function createFixture() {
         serviceSlug: fixture.serviceSlug,
         doctorClinicId: result.doctorClinic.id,
         doctorClinicServiceId: result.doctorClinicService.id,
-        bookingDate: primaryBookingDate,
+        bookingDate: result.firstAvailableBookingDate,
         availableSlotCount: result.availableSlotCount,
         generatedSlotCount: result.generatedSlotCount,
+        online: {
+          serviceCode: onlineFixture.serviceCode,
+          serviceId: result.onlineService.id,
+          serviceSlug: onlineFixture.serviceSlug,
+          doctorClinicServiceId: result.onlineDoctorClinicService.id,
+          bookingDate: result.onlineFirstAvailableBookingDate,
+          paymentMode: "online_required",
+          feeMinor: onlineFixture.feeMinor.toString(),
+          currency: onlineFixture.currency,
+          availableSlotCount: result.onlineAvailableSlotCount,
+          generatedSlotCount: result.onlineGeneratedSlotCount
+        },
         patientId: result.patient.id
       },
       null,
@@ -259,7 +338,10 @@ async function createFixture() {
 async function cleanupFixture() {
   assertCleanupAllowed();
   const appointmentCleanupAllowed = process.env.E2E_FIXTURE_CLEAN_APPOINTMENTS === "true";
-  const service = await prisma.service.findUnique({ where: { slug: fixture.serviceSlug } });
+  const services = await prisma.service.findMany({
+    where: { slug: { in: [fixture.serviceSlug, onlineFixture.serviceSlug] } },
+    select: { id: true, slug: true }
+  });
   const clinic = await prisma.clinic.findFirst({
     where: { slug: fixture.clinicSlug, deletedAt: null }
   });
@@ -274,15 +356,16 @@ async function cleanupFixture() {
     where: { email: fixture.doctorEmail, deletedAt: null }
   });
 
-  if (!service || !clinic || !doctor) {
+  if (services.length === 0 || !clinic || !doctor) {
     console.log(JSON.stringify({ cleanup: "nothing_to_delete" }, null, 2));
     return;
   }
 
+  const serviceIds = services.map((service) => service.id);
   const doctorClinicServices = await prisma.doctorClinicService.findMany({
     where: {
       clinicService: {
-        serviceId: service.id,
+        serviceId: { in: serviceIds },
         clinicId: clinic.id
       },
       doctorClinic: {
@@ -395,7 +478,7 @@ async function cleanupFixture() {
       if (doctorUser) {
         await tx.user.delete({ where: { id: doctorUser.id } });
       }
-      await tx.service.delete({ where: { id: service.id } });
+      await tx.service.deleteMany({ where: { id: { in: serviceIds } } });
       await tx.specialty.deleteMany({ where: { slug: fixture.specialtySlug } });
     }
 
@@ -580,7 +663,13 @@ async function upsertDoctorClinic(
 
 async function upsertDoctorClinicService(
   tx: PrismaClientLike,
-  input: { doctorClinicId: string; clinicServiceId: string }
+  input: {
+    doctorClinicId: string;
+    clinicServiceId: string;
+    feeMinor: bigint;
+    currency: string;
+    paymentMode: PaymentMode;
+  }
 ) {
   const existing = await tx.doctorClinicService.findFirst({
     where: {
@@ -594,9 +683,9 @@ async function upsertDoctorClinicService(
     doctorClinicId: input.doctorClinicId,
     clinicServiceId: input.clinicServiceId,
     durationMinutes: fixture.durationMinutes,
-    feeMinor: fixture.feeMinor,
-    currency: fixture.currency,
-    paymentMode: PaymentMode.PAY_AT_CLINIC,
+    feeMinor: input.feeMinor,
+    currency: input.currency,
+    paymentMode: input.paymentMode,
     cancellationWindowMinutes: 30,
     rescheduleWindowMinutes: 30,
     maxReschedules: 2,
@@ -633,17 +722,22 @@ async function replaceDoctorAvailability(tx: PrismaClientLike, doctorClinicId: s
   await tx.doctorAvailabilityRule.deleteMany({ where: { doctorClinicId } });
 
   for (let dayOfWeek = 1; dayOfWeek <= 5; dayOfWeek += 1) {
-    await tx.doctorAvailabilityRule.create({
-      data: {
-        doctorClinicId,
-        dayOfWeek,
-        startsAt: timeOnly(10, 0),
-        endsAt: timeOnly(12, 0),
-        slotIntervalMinutes: fixture.slotIntervalMinutes,
-        maxPatients: 1,
-        isActive: true
-      }
-    });
+    for (const [startsAt, endsAt] of [
+      [timeOnly(10, 0), timeOnly(12, 0)],
+      [timeOnly(14, 0), timeOnly(16, 0)]
+    ] as const) {
+      await tx.doctorAvailabilityRule.create({
+        data: {
+          doctorClinicId,
+          dayOfWeek,
+          startsAt,
+          endsAt,
+          slotIntervalMinutes: fixture.slotIntervalMinutes,
+          maxPatients: 1,
+          isActive: true
+        }
+      });
+    }
   }
 }
 
@@ -724,29 +818,37 @@ async function refreshSlots(
     }
   }
 
-  const availableSlotCount = await tx.appointmentSlot.count({
-    where: {
-      doctorClinicServiceId: input.doctorClinicServiceId,
-      startsAt: { gte: input.now },
-      isActive: true,
-      appointments: { none: { status: { in: blockingAppointmentStatuses } } },
-      holds: {
-        none: {
-          status: SlotHoldStatus.ACTIVE,
-          expiresAt: { gt: input.now }
-        }
+  const availableSlotWhere = {
+    doctorClinicServiceId: input.doctorClinicServiceId,
+    startsAt: { gte: input.now },
+    isActive: true,
+    appointments: { none: { status: { in: blockingAppointmentStatuses } } },
+    holds: {
+      none: {
+        status: SlotHoldStatus.ACTIVE,
+        expiresAt: { gt: input.now }
       }
     }
+  };
+  const availableSlotCount = await tx.appointmentSlot.count({ where: availableSlotWhere });
+  const firstAvailableSlot = await tx.appointmentSlot.findFirst({
+    where: availableSlotWhere,
+    orderBy: { startsAt: "asc" },
+    select: { startsAt: true }
   });
 
-  if (availableSlotCount < 3) {
+  if (availableSlotCount < 3 || !firstAvailableSlot) {
     throw new Error(`Expected at least 3 available fixture slots, found ${availableSlotCount}`);
   }
 
-  return { availableSlotCount, generatedSlotCount };
+  return {
+    availableSlotCount,
+    generatedSlotCount,
+    firstAvailableBookingDate: toColomboYmd(firstAvailableSlot.startsAt)
+  };
 }
 
-function buildSlotPlan(now: Date): FixtureSlot[] {
+function buildSlotPlan(now: Date, localHours: readonly number[] = slotLocalHours): FixtureSlot[] {
   const slots: FixtureSlot[] = [];
   const localToday = toColomboLocalDateParts(now);
   let cursor = Date.UTC(localToday.year, localToday.month - 1, localToday.day + 1);
@@ -758,7 +860,7 @@ function buildSlotPlan(now: Date): FixtureSlot[] {
     if (dayOfWeek >= 1 && dayOfWeek <= 5) {
       const localDate = toYmd(date);
 
-      for (const hour of slotLocalHours) {
+      for (const hour of localHours) {
         const startsAt = colomboLocalDateTimeToUtc(localDate, hour);
         const endsAt = new Date(startsAt.getTime() + fixture.durationMinutes * 60 * 1000);
 
@@ -782,6 +884,12 @@ function toColomboLocalDateParts(date: Date) {
     month: local.getUTCMonth() + 1,
     day: local.getUTCDate()
   };
+}
+
+function toColomboYmd(date: Date) {
+  const local = toColomboLocalDateParts(date);
+
+  return `${local.year}-${String(local.month).padStart(2, "0")}-${String(local.day).padStart(2, "0")}`;
 }
 
 function colomboLocalDateTimeToUtc(ymd: string, hour: number) {

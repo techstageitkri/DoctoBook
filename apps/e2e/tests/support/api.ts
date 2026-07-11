@@ -32,6 +32,12 @@ export type AvailabilitySlot = {
   currency: string;
 };
 
+export type AvailabilityQuery = {
+  doctorId?: string | null;
+  serviceId?: string | null;
+  bookingDate?: string;
+};
+
 export async function loginPatient(request: APIRequestContext) {
   if (!e2eConfig.patientEmail || !e2eConfig.patientPassword) {
     throw new Error("E2E_PATIENT_EMAIL and E2E_PATIENT_PASSWORD are required");
@@ -63,16 +69,20 @@ export async function getPatientProfile(request: APIRequestContext, accessToken:
   return (await response.json()) as { patient: PatientProfile };
 }
 
-export async function getAvailableSlots(request: APIRequestContext) {
-  if (!e2eConfig.doctorId || !e2eConfig.serviceId) {
+export async function getAvailableSlots(request: APIRequestContext, query: AvailabilityQuery = {}) {
+  const doctorId = query.doctorId ?? e2eConfig.doctorId;
+  const serviceId = query.serviceId ?? e2eConfig.serviceId;
+  const bookingDate = query.bookingDate ?? e2eConfig.bookingDate;
+
+  if (!doctorId || !serviceId) {
     throw new Error("E2E_DOCTOR_ID and E2E_SERVICE_ID are required");
   }
 
   const params = new URLSearchParams({
-    doctorId: e2eConfig.doctorId,
-    serviceId: e2eConfig.serviceId,
-    fromDate: e2eConfig.bookingDate,
-    toDate: e2eConfig.bookingDate,
+    doctorId,
+    serviceId,
+    fromDate: bookingDate,
+    toDate: bookingDate,
     limit: "10"
   });
   const response = await request.get(apiUrl(`/v1/public/availability?${params.toString()}`));

@@ -10,6 +10,7 @@ export type E2EConfig = {
   patientPassword: string | null;
   doctorId: string | null;
   serviceId: string | null;
+  payhereMerchantId: string | null;
   bookingDate: string;
 };
 
@@ -29,6 +30,7 @@ export const e2eConfig: E2EConfig = {
   patientPassword: optionalEnv("E2E_PATIENT_PASSWORD"),
   doctorId: optionalEnv("E2E_DOCTOR_ID"),
   serviceId: optionalEnv("E2E_SERVICE_ID"),
+  payhereMerchantId: optionalEnv("E2E_PAYHERE_MERCHANT_ID"),
   bookingDate: process.env.E2E_BOOKING_DATE ?? tomorrowYmd()
 };
 

@@ -9,11 +9,14 @@ test.describe("provider and security negative checks", () => {
   );
 
   test("invalid payment webhook signatures are rejected", async ({ request }) => {
+    test.skip(!e2eConfig.payhereMerchantId, "Set E2E_PAYHERE_MERCHANT_ID");
+
     const response = await request.post(apiUrl("/v1/payments/webhooks/payhere"), {
       headers: {
         "Content-Type": "application/json"
       },
       data: {
+        merchant_id: e2eConfig.payhereMerchantId,
         order_id: crypto.randomUUID(),
         payment_id: `invalid-${crypto.randomUUID()}`,
         status_code: "2",

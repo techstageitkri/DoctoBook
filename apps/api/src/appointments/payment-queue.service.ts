@@ -1,5 +1,6 @@
 import { Injectable, OnModuleDestroy } from "@nestjs/common";
 import { Queue } from "bullmq";
+import { createLogger } from "@doctobook/observability";
 import {
   InitiatePaymentJob,
   PAYMENT_INITIATE_JOB,
@@ -8,6 +9,10 @@ import {
 
 @Injectable()
 export class PaymentQueueService implements OnModuleDestroy {
+  private readonly logger = createLogger({
+    service: "api",
+    environment: process.env.NODE_ENV ?? "development"
+  });
   private readonly queue = new Queue<InitiatePaymentJob>(PAYMENT_INITIATION_QUEUE_NAME, {
     connection: {
       url: process.env.REDIS_URL ?? "redis://localhost:6379"
@@ -28,8 +33,16 @@ export class PaymentQueueService implements OnModuleDestroy {
   }
 
   async enqueuePaymentInitiation(input: InitiatePaymentJob) {
-    await this.queue.add(PAYMENT_INITIATE_JOB, input, {
+    const job = await this.queue.add(PAYMENT_INITIATE_JOB, input, {
       jobId: `payment-initiation|${input.paymentId}`
+    });
+
+    this.logger.info("queue.job.enqueued", {
+      queue: PAYMENT_INITIATION_QUEUE_NAME,
+      jobId: job.id ?? null,
+      jobName: PAYMENT_INITIATE_JOB,
+      paymentId: input.paymentId,
+      appointmentId: input.appointmentId
     });
 
     return input;

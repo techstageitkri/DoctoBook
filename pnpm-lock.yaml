@@ -47,6 +47,9 @@ importers:
       '@doctobook/notifications':
         specifier: workspace:*
         version: link:../../packages/notifications
+      '@doctobook/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
       '@doctobook/payments':
         specifier: workspace:*
         version: link:../../packages/payments
@@ -151,6 +154,9 @@ importers:
       '@doctobook/notifications':
         specifier: workspace:*
         version: link:../../packages/notifications
+      '@doctobook/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
       '@doctobook/payments':
         specifier: workspace:*
         version: link:../../packages/payments
@@ -218,6 +224,15 @@ importers:
       '@types/nodemailer':
         specifier: ^8.0.1
         version: 8.0.1
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: latest
+        version: 4.1.10(@types/node@26.1.1)(vite@8.1.4(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.23.0))
+
+  packages/observability:
+    devDependencies:
       typescript:
         specifier: 5.9.3
         version: 5.9.3

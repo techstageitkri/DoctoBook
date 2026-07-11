@@ -1,5 +1,6 @@
 import { Injectable, OnModuleDestroy } from "@nestjs/common";
 import { Queue } from "bullmq";
+import { createLogger } from "@doctobook/observability";
 import {
   DispatchNotificationJob,
   NOTIFICATION_DISPATCH_JOB,
@@ -9,6 +10,10 @@ import {
 
 @Injectable()
 export class NotificationQueueService implements OnModuleDestroy {
+  private readonly logger = createLogger({
+    service: "api",
+    environment: process.env.NODE_ENV ?? "development"
+  });
   private readonly queue = new Queue<DispatchNotificationJob>(NOTIFICATION_DISPATCH_QUEUE_NAME, {
     connection: {
       url: process.env.REDIS_URL ?? "redis://localhost:6379"
@@ -29,12 +34,19 @@ export class NotificationQueueService implements OnModuleDestroy {
   }
 
   async enqueueDispatch(notificationLogId: string) {
-    await this.queue.add(
+    const job = await this.queue.add(
       NOTIFICATION_DISPATCH_JOB,
       { notificationLogId },
       {
         jobId: getNotificationDispatchJobId(notificationLogId)
       }
     );
+
+    this.logger.info("queue.job.enqueued", {
+      queue: NOTIFICATION_DISPATCH_QUEUE_NAME,
+      jobId: job.id ?? null,
+      jobName: NOTIFICATION_DISPATCH_JOB,
+      notificationLogId
+    });
   }
 }

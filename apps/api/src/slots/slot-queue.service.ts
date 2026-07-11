@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, OnModuleDestroy } from "@nestjs/common";
 import { Queue } from "bullmq";
+import { createLogger } from "@doctobook/observability";
 import {
   DEFAULT_SLOT_GENERATION_DAYS,
   GenerateSlotsJob,
@@ -21,6 +22,10 @@ type EnqueueOptions = {
 
 @Injectable()
 export class SlotQueueService implements OnModuleDestroy {
+  private readonly logger = createLogger({
+    service: "api",
+    environment: process.env.NODE_ENV ?? "development"
+  });
   private readonly queue = new Queue<GenerateSlotsJob>(SLOT_GENERATION_QUEUE_NAME, {
     connection: {
       url: process.env.REDIS_URL ?? "redis://localhost:6379"
@@ -46,8 +51,18 @@ export class SlotQueueService implements OnModuleDestroy {
     const payload = this.buildGeneratePayload(doctorClinicId, options);
     const jobId = getSlotGenerationJobId(payload);
 
-    await this.queue.add(SLOT_GENERATE_RANGE_JOB, payload, {
+    const job = await this.queue.add(SLOT_GENERATE_RANGE_JOB, payload, {
       jobId
+    });
+
+    this.logger.info("queue.job.enqueued", {
+      queue: SLOT_GENERATION_QUEUE_NAME,
+      jobId: job.id ?? null,
+      jobName: SLOT_GENERATE_RANGE_JOB,
+      doctorClinicId,
+      fromDate: payload.fromDate,
+      toDate: payload.toDate,
+      reason: payload.reason
     });
 
     return { jobId, ...payload };

@@ -6,6 +6,7 @@ import {
   NotFoundException
 } from "@nestjs/common";
 import { AppointmentStatus, Prisma, ReviewStatus } from "@doctobook/database";
+import { createLogger } from "@doctobook/observability";
 import { AuthenticatedUser, RequestContext } from "../auth/auth.types.js";
 import { AuthorizationService } from "../authorization/authorization.service.js";
 import { PrismaService } from "../database/prisma.service.js";
@@ -23,6 +24,11 @@ const hiddenReviewStatuses: ReviewStatus[] = [ReviewStatus.HIDDEN, ReviewStatus.
 
 @Injectable()
 export class ReviewService {
+  private readonly logger = createLogger({
+    service: "api",
+    environment: process.env.NODE_ENV ?? "development"
+  });
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly authorizationService: AuthorizationService,
@@ -627,7 +633,7 @@ export class ReviewService {
     try {
       await action();
     } catch (error) {
-      console.warn("Notification enqueue failed", error);
+      this.logger.error("notification.enqueue_failed", {}, error);
     }
   }
 

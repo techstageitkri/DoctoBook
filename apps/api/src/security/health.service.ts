@@ -2,6 +2,7 @@ import { Injectable, OnModuleDestroy, ServiceUnavailableException } from "@nestj
 import { Redis } from "ioredis";
 import { APP_NAME } from "@doctobook/shared";
 import { parseServerEnv } from "@doctobook/config";
+import { createLogger } from "@doctobook/observability";
 import { PrismaService } from "../database/prisma.service.js";
 
 type HealthCheck = {
@@ -13,6 +14,10 @@ type HealthCheck = {
 @Injectable()
 export class HealthService implements OnModuleDestroy {
   private readonly env = parseServerEnv(process.env);
+  private readonly logger = createLogger({
+    service: "api",
+    environment: this.env.NODE_ENV
+  });
   private readonly redis = new Redis(this.env.REDIS_URL, {
     enableOfflineQueue: false,
     lazyConnect: true,
@@ -47,6 +52,9 @@ export class HealthService implements OnModuleDestroy {
     };
 
     if (status !== "ok") {
+      this.logger.warn("api.readiness_failed", {
+        checks: payload.checks
+      });
       throw new ServiceUnavailableException(payload);
     }
 

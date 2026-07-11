@@ -1,6 +1,7 @@
 import { Job, Queue, QueueEvents, Worker } from "bullmq";
 import { parseWorkerEnv } from "@doctobook/config";
 import { AppointmentStatus, ClinicAssociationStatus, PrismaClient, ScopeType } from "@doctobook/database";
+import { createLogger } from "@doctobook/observability";
 import {
   DispatchNotificationJob,
   NOTIFICATION_DISPATCH_JOB,
@@ -8,6 +9,7 @@ import {
   NOTIFICATION_SCHEDULE_REMINDERS_JOB,
   createNotificationLogs,
   dispatchNotificationLog,
+  getNotificationProviderHealth,
   getNotificationDispatchJobId
 } from "@doctobook/notifications";
 import {
@@ -36,6 +38,10 @@ import {
 import { expirePaymentHolds } from "./payment-holds.js";
 
 const env = parseWorkerEnv(process.env);
+const logger = createLogger({
+  service: "worker",
+  environment: env.NODE_ENV
+});
 const connection = {
   url: env.REDIS_URL
 };
@@ -69,6 +75,9 @@ export const slotGenerationQueue = new Queue<SlotWorkerJob>(SLOT_GENERATION_QUEU
 });
 const queueEvents = new QueueEvents(SLOT_GENERATION_QUEUE_NAME, { connection });
 const paymentInitiationQueueEvents = new QueueEvents(PAYMENT_INITIATION_QUEUE_NAME, { connection });
+const paymentInitiationQueue = new Queue<InitiatePaymentJob>(PAYMENT_INITIATION_QUEUE_NAME, {
+  connection
+});
 const refundProcessingQueue = new Queue<ProcessRefundJob | Record<string, never>>(
   REFUND_PROCESSING_QUEUE_NAME,
   {
@@ -115,9 +124,15 @@ const holdExpirationQueue = new Queue<Record<string, never>>(HOLD_EXPIRATION_QUE
   }
 });
 const holdExpirationQueueEvents = new QueueEvents(HOLD_EXPIRATION_QUEUE_NAME, { connection });
+const heartbeatTimer = setInterval(() => {
+  void logQueueHeartbeat().catch((error) => {
+    logger.error("worker.heartbeat_failed", {}, error);
+  });
+}, 60_000);
+heartbeatTimer.unref();
 const slotWorker = new Worker(
   SLOT_GENERATION_QUEUE_NAME,
-  async (job: Job<SlotWorkerJob>) => {
+  async (job: Job<SlotWorkerJob>) => runLoggedJob(SLOT_GENERATION_QUEUE_NAME, job, async () => {
     if (job.name === SLOT_GENERATE_RANGE_JOB || job.name === SLOT_REGENERATE_ASSOCIATION_JOB) {
       return slotGenerationService.generateRange(job.data as GenerateSlotsJob);
     }
@@ -132,7 +147,7 @@ const slotWorker = new Worker(
     }
 
     throw new Error(`Unsupported slot-generation job ${job.name}`);
-  },
+  }),
   {
     connection,
     concurrency: 2
@@ -140,13 +155,13 @@ const slotWorker = new Worker(
 );
 const paymentInitiationWorker = new Worker(
   PAYMENT_INITIATION_QUEUE_NAME,
-  async (job: Job<InitiatePaymentJob>) => {
+  async (job: Job<InitiatePaymentJob>) => runLoggedJob(PAYMENT_INITIATION_QUEUE_NAME, job, async () => {
     if (job.name !== PAYMENT_INITIATE_JOB) {
       throw new Error(`Unsupported payment-initiation job ${job.name}`);
     }
 
     return initiateStoredPayment(prisma, job.data.paymentId, process.env);
-  },
+  }),
   {
     connection,
     concurrency: 4
@@ -154,7 +169,7 @@ const paymentInitiationWorker = new Worker(
 );
 const refundProcessingWorker = new Worker(
   REFUND_PROCESSING_QUEUE_NAME,
-  async (job: Job<ProcessRefundJob | Record<string, never>>) => {
+  async (job: Job<ProcessRefundJob | Record<string, never>>) => runLoggedJob(REFUND_PROCESSING_QUEUE_NAME, job, async () => {
     if (job.name === SCHEDULE_REFUND_PROCESSING_JOB) {
       return enqueueRequestedRefunds();
     }
@@ -177,7 +192,7 @@ const refundProcessingWorker = new Worker(
       await enqueueRefundNotification(payload.refundId, "refund.failed");
       throw error;
     }
-  },
+  }),
   {
     connection,
     concurrency: 2
@@ -185,7 +200,7 @@ const refundProcessingWorker = new Worker(
 );
 const notificationDispatchWorker = new Worker(
   NOTIFICATION_DISPATCH_QUEUE_NAME,
-  async (job: Job<DispatchNotificationJob | Record<string, never>>) => {
+  async (job: Job<DispatchNotificationJob | Record<string, never>>) => runLoggedJob(NOTIFICATION_DISPATCH_QUEUE_NAME, job, async () => {
     if (job.name === NOTIFICATION_SCHEDULE_REMINDERS_JOB) {
       return enqueueAppointmentReminders();
     }
@@ -197,7 +212,7 @@ const notificationDispatchWorker = new Worker(
     const payload = job.data as DispatchNotificationJob;
 
     return dispatchNotificationLog(prisma, payload.notificationLogId, process.env);
-  },
+  }),
   {
     connection,
     concurrency: 8
@@ -205,58 +220,24 @@ const notificationDispatchWorker = new Worker(
 );
 const holdExpirationWorker = new Worker(
   HOLD_EXPIRATION_QUEUE_NAME,
-  async (job: Job<Record<string, never>>) => {
+  async (job: Job<Record<string, never>>) => runLoggedJob(HOLD_EXPIRATION_QUEUE_NAME, job, async () => {
     if (job.name !== EXPIRE_PAYMENT_HOLDS_JOB) {
       throw new Error(`Unsupported hold-expiration job ${job.name}`);
     }
 
     return expirePaymentHolds(prisma);
-  },
+  }),
   {
     connection,
     concurrency: 1
   }
 );
 
-queueEvents.on("failed", ({ jobId, failedReason }) => {
-  console.error("Slot generation job failed", { jobId, failedReason });
-});
-
-queueEvents.on("completed", ({ jobId }) => {
-  console.log("Slot generation job completed", { jobId });
-});
-
-paymentInitiationQueueEvents.on("failed", ({ jobId, failedReason }) => {
-  console.error("Payment initiation job failed", { jobId, failedReason });
-});
-
-paymentInitiationQueueEvents.on("completed", ({ jobId }) => {
-  console.log("Payment initiation job completed", { jobId });
-});
-
-refundProcessingQueueEvents.on("failed", ({ jobId, failedReason }) => {
-  console.error("Refund processing job failed", { jobId, failedReason });
-});
-
-refundProcessingQueueEvents.on("completed", ({ jobId }) => {
-  console.log("Refund processing job completed", { jobId });
-});
-
-notificationDispatchQueueEvents.on("failed", ({ jobId, failedReason }) => {
-  console.error("Notification job failed", { jobId, failedReason });
-});
-
-notificationDispatchQueueEvents.on("completed", ({ jobId }) => {
-  console.log("Notification job completed", { jobId });
-});
-
-holdExpirationQueueEvents.on("failed", ({ jobId, failedReason }) => {
-  console.error("Payment hold expiration job failed", { jobId, failedReason });
-});
-
-holdExpirationQueueEvents.on("completed", ({ jobId }) => {
-  console.log("Payment hold expiration job completed", { jobId });
-});
+registerQueueEventLogging(SLOT_GENERATION_QUEUE_NAME, queueEvents);
+registerQueueEventLogging(PAYMENT_INITIATION_QUEUE_NAME, paymentInitiationQueueEvents);
+registerQueueEventLogging(REFUND_PROCESSING_QUEUE_NAME, refundProcessingQueueEvents);
+registerQueueEventLogging(NOTIFICATION_DISPATCH_QUEUE_NAME, notificationDispatchQueueEvents);
+registerQueueEventLogging(HOLD_EXPIRATION_QUEUE_NAME, holdExpirationQueueEvents);
 
 await prisma.$connect();
 await scheduleRollingGeneration();
@@ -264,7 +245,153 @@ await schedulePaymentHoldExpiration();
 await scheduleRefundProcessing();
 await scheduleAppointmentReminders();
 
-console.log("DoctoBook worker started");
+logger.info("worker.started", {
+  queues: [
+    SLOT_GENERATION_QUEUE_NAME,
+    PAYMENT_INITIATION_QUEUE_NAME,
+    REFUND_PROCESSING_QUEUE_NAME,
+    NOTIFICATION_DISPATCH_QUEUE_NAME,
+    HOLD_EXPIRATION_QUEUE_NAME
+  ],
+  paymentProvider: process.env.PAYMENT_PROVIDER ?? "mock",
+  notificationProviders: getNotificationProviderHealth(process.env)
+});
+void logQueueHeartbeat().catch((error) => {
+  logger.error("worker.heartbeat_failed", {}, error);
+});
+
+async function runLoggedJob<TData, TResult>(
+  queue: string,
+  job: Job<TData>,
+  handler: () => Promise<TResult>
+) {
+  const startedAt = Date.now();
+  const context = jobLogContext(queue, job);
+
+  logger.info("queue.job.started", context);
+
+  try {
+    const result = await handler();
+
+    logger.info("queue.job.completed", {
+      ...context,
+      durationMs: Date.now() - startedAt,
+      result: summarizeJobResult(result)
+    });
+
+    return result;
+  } catch (error) {
+    logger.error(
+      "queue.job.failed",
+      {
+        ...context,
+        durationMs: Date.now() - startedAt
+      },
+      error
+    );
+    throw error;
+  }
+}
+
+function registerQueueEventLogging(queue: string, events: QueueEvents) {
+  events.on("failed", ({ jobId, failedReason, prev }) => {
+    logger.error("queue.event.failed", {
+      queue,
+      jobId: jobId ?? null,
+      failedReason,
+      previousState: prev ?? null
+    });
+  });
+  events.on("completed", ({ jobId, returnvalue, prev }) => {
+    logger.info("queue.event.completed", {
+      queue,
+      jobId: jobId ?? null,
+      returnvalue,
+      previousState: prev ?? null
+    });
+  });
+  events.on("stalled", ({ jobId }) => {
+    logger.warn("queue.event.stalled", {
+      queue,
+      jobId: jobId ?? null
+    });
+  });
+  events.on("error", (error) => {
+    logger.error("queue.event.error", { queue }, error);
+  });
+}
+
+function jobLogContext<TData>(queue: string, job: Job<TData>) {
+  const data = job.data && typeof job.data === "object" ? job.data as Record<string, unknown> : {};
+
+  return {
+    queue,
+    jobId: job.id ?? null,
+    jobName: job.name,
+    attempt: job.attemptsMade + 1,
+    paymentId: stringValue(data.paymentId),
+    appointmentId: stringValue(data.appointmentId),
+    refundId: stringValue(data.refundId),
+    notificationLogId: stringValue(data.notificationLogId),
+    doctorClinicId: stringValue(data.doctorClinicId),
+    clinicLocationId: stringValue(data.clinicLocationId),
+    reason: stringValue(data.reason)
+  };
+}
+
+function stringValue(value: unknown) {
+  return typeof value === "string" ? value : null;
+}
+
+function summarizeJobResult(result: unknown) {
+  if (!result || typeof result !== "object") {
+    return null;
+  }
+
+  const record = result as Record<string, unknown>;
+  const allowedKeys = [
+    "processed",
+    "skipped",
+    "duplicate",
+    "status",
+    "provider",
+    "failureClassification",
+    "queued",
+    "created",
+    "deactivated",
+    "deleted",
+    "refundId",
+    "paymentId",
+    "appointmentId",
+    "notificationLogId"
+  ];
+
+  return Object.fromEntries(
+    allowedKeys
+      .filter((key) => record[key] !== undefined)
+      .map((key) => [key, record[key]])
+  );
+}
+
+async function logQueueHeartbeat() {
+  const queues = [
+    slotGenerationQueue,
+    paymentInitiationQueue,
+    refundProcessingQueue,
+    notificationDispatchQueue,
+    holdExpirationQueue
+  ];
+  const counts = await Promise.all(
+    queues.map(async (queue) => ({
+      queue: queue.name,
+      counts: await queue.getJobCounts("waiting", "active", "delayed", "failed", "paused")
+    }))
+  );
+
+  logger.info("worker.heartbeat", {
+    queues: counts
+  });
+}
 
 async function enqueueScheduledRegeneration() {
   const associations = await prisma.doctorClinic.findMany({
@@ -585,6 +712,8 @@ async function enqueueRequestedRefunds() {
 }
 
 async function shutdown() {
+  logger.info("worker.shutdown_started");
+  clearInterval(heartbeatTimer);
   await slotWorker.close();
   await paymentInitiationWorker.close();
   await refundProcessingWorker.close();
@@ -596,16 +725,29 @@ async function shutdown() {
   await notificationDispatchQueueEvents.close();
   await holdExpirationQueueEvents.close();
   await slotGenerationQueue.close();
+  await paymentInitiationQueue.close();
   await refundProcessingQueue.close();
   await notificationDispatchQueue.close();
   await holdExpirationQueue.close();
   await prisma.$disconnect();
+  logger.info("worker.shutdown_completed");
 }
 
 process.on("SIGINT", () => {
+  logger.info("worker.signal", { signal: "SIGINT" });
   void shutdown().then(() => process.exit(0));
 });
 
 process.on("SIGTERM", () => {
+  logger.info("worker.signal", { signal: "SIGTERM" });
   void shutdown().then(() => process.exit(0));
+});
+
+process.on("unhandledRejection", (reason) => {
+  logger.error("worker.unhandled_rejection", {}, reason);
+});
+
+process.on("uncaughtException", (error) => {
+  logger.error("worker.uncaught_exception", {}, error);
+  process.exitCode = 1;
 });

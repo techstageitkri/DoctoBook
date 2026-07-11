@@ -1,6 +1,7 @@
 import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
 import { parseServerEnv } from "@doctobook/config";
+import { createLogger } from "@doctobook/observability";
 import { AppModule } from "./app.module.js";
 import {
   configureRequestHardening,
@@ -10,11 +11,17 @@ import { SafeHttpExceptionFilter } from "./security/safe-http-exception.filter.j
 
 async function bootstrap() {
   const env = parseServerEnv(process.env);
+  const logger = createLogger({
+    service: "api",
+    environment: env.NODE_ENV
+  });
   const app = await NestFactory.create(AppModule, {
-    bodyParser: false
+    bodyParser: false,
+    logger: false
   });
 
-  configureRequestHardening(app, env);
+  registerProcessErrorHandlers(logger);
+  configureRequestHardening(app, env, logger);
 
   app.enableCors({
     origin(origin: string | undefined, callback: (error: Error | null, allowed?: boolean) => void) {
@@ -22,9 +29,26 @@ async function bootstrap() {
     },
     credentials: true
   });
-  app.useGlobalFilters(new SafeHttpExceptionFilter());
+  app.useGlobalFilters(new SafeHttpExceptionFilter(logger));
 
   await app.listen(env.API_PORT);
+  logger.info("api.started", { port: env.API_PORT });
 }
 
-void bootstrap();
+bootstrap().catch((error) => {
+  createLogger({
+    service: "api",
+    environment: process.env.NODE_ENV ?? "development"
+  }).error("api.start_failed", {}, error);
+  process.exitCode = 1;
+});
+
+function registerProcessErrorHandlers(logger: ReturnType<typeof createLogger>) {
+  process.on("unhandledRejection", (reason) => {
+    logger.error("api.unhandled_rejection", {}, reason);
+  });
+  process.on("uncaughtException", (error) => {
+    logger.error("api.uncaught_exception", {}, error);
+    process.exitCode = 1;
+  });
+}

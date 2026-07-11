@@ -14,6 +14,7 @@
     "@doctobook/config": "workspace:*",
     "@doctobook/database": "workspace:*",
     "@doctobook/notifications": "workspace:*",
+    "@doctobook/observability": "workspace:*",
     "@doctobook/payments": "workspace:*",
     "@doctobook/shared": "workspace:*",
     "@doctobook/slots": "workspace:*",

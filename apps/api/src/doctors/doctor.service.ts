@@ -12,6 +12,7 @@ import {
   Prisma,
   UserStatus
 } from "@doctobook/database";
+import { createLogger } from "@doctobook/observability";
 import { AuditService } from "../audit/audit.service.js";
 import { AuthService } from "../auth/auth.service.js";
 import { AuthenticatedUser, RequestContext } from "../auth/auth.types.js";
@@ -37,6 +38,11 @@ import {
 
 @Injectable()
 export class DoctorService {
+  private readonly logger = createLogger({
+    service: "api",
+    environment: process.env.NODE_ENV ?? "development"
+  });
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly authorizationService: AuthorizationService,
@@ -1113,7 +1119,7 @@ export class DoctorService {
     try {
       await action();
     } catch (error) {
-      console.warn("Notification enqueue failed", error);
+      this.logger.error("notification.enqueue_failed", {}, error);
     }
   }
 

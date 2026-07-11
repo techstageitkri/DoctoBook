@@ -9,6 +9,7 @@ import {
 import { JwtService } from "@nestjs/jwt";
 import { DoctorStatus, Prisma, UserStatus } from "@doctobook/database";
 import { parseServerEnv } from "@doctobook/config";
+import { createLogger } from "@doctobook/observability";
 import { AuditService } from "../audit/audit.service.js";
 import { PrismaService } from "../database/prisma.service.js";
 import { NotificationService } from "../notifications/notification.service.js";
@@ -55,6 +56,11 @@ const accessTokenTtlSeconds = 15 * 60;
 
 @Injectable()
 export class AuthService {
+  private readonly logger = createLogger({
+    service: "api",
+    environment: process.env.NODE_ENV ?? "development"
+  });
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
@@ -755,7 +761,7 @@ export class AuthService {
     try {
       await action();
     } catch (error) {
-      console.warn("Notification enqueue failed", error);
+      this.logger.error("notification.enqueue_failed", {}, error);
     }
   }
 

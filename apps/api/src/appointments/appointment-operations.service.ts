@@ -15,6 +15,7 @@ import {
   ScopeType,
   SlotHoldStatus
 } from "@doctobook/database";
+import { createLogger } from "@doctobook/observability";
 import { AuthenticatedUser, RequestContext } from "../auth/auth.types.js";
 import { AuthorizationService } from "../authorization/authorization.service.js";
 import { PrismaService } from "../database/prisma.service.js";
@@ -135,6 +136,11 @@ const appointmentOperationsInclude = {
 
 @Injectable()
 export class AppointmentOperationsService {
+  private readonly logger = createLogger({
+    service: "api",
+    environment: process.env.NODE_ENV ?? "development"
+  });
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly authorizationService: AuthorizationService,
@@ -1088,7 +1094,7 @@ export class AppointmentOperationsService {
     try {
       await action();
     } catch (error) {
-      console.warn("Notification enqueue failed", error);
+      this.logger.error("notification.enqueue_failed", {}, error);
     }
   }
 }

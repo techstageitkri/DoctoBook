@@ -3,17 +3,24 @@ import { IncomingMessage, ServerResponse } from "node:http";
 import { json, urlencoded } from "express";
 import { INestApplication } from "@nestjs/common";
 import { ServerEnv } from "@doctobook/config";
+import { JsonLogger } from "@doctobook/observability";
 import { refreshCookieName } from "../auth/auth.cookies.js";
+import { AuthenticatedUser } from "../auth/auth.types.js";
 
 type MiddlewareRequest = IncomingMessage & {
   id?: string;
   originalUrl?: string;
   url?: string;
+  user?: AuthenticatedUser;
 };
 
 type NextFunction = () => void;
 
-export function configureRequestHardening(app: INestApplication, env: ServerEnv) {
+export function configureRequestHardening(
+  app: INestApplication,
+  env: ServerEnv,
+  logger?: JsonLogger
+) {
   const express = app.getHttpAdapter().getInstance() as {
     set?: (key: string, value: boolean | number | string) => void;
   };
@@ -21,6 +28,9 @@ export function configureRequestHardening(app: INestApplication, env: ServerEnv)
   express.set?.("trust proxy", env.API_TRUST_PROXY);
 
   app.use(requestIdMiddleware);
+  if (logger) {
+    app.use(requestLifecycleLogger(logger));
+  }
   app.use(securityHeadersMiddleware(env));
   app.use(cookieAuthenticatedCsrfMiddleware(env));
   app.use("/v1/payments/webhooks", json({ limit: env.API_WEBHOOK_BODY_LIMIT }));
@@ -68,6 +78,40 @@ function requestIdMiddleware(
   request.id = requestId;
   response.setHeader("x-request-id", requestId);
   next();
+}
+
+function requestLifecycleLogger(logger: JsonLogger) {
+  return (request: MiddlewareRequest, response: ServerResponse, next: NextFunction) => {
+    const startedAt = process.hrtime.bigint();
+
+    response.on("finish", () => {
+      const durationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
+      const statusCode = response.statusCode;
+      const context = {
+        requestId: request.id ?? null,
+        method: request.method ?? null,
+        route: requestPath(request),
+        statusCode,
+        durationMs: Math.round(durationMs),
+        userId: request.user?.id ?? null,
+        role: request.user?.roles?.[0] ?? null
+      };
+
+      if (statusCode >= 500) {
+        logger.error("api.request.completed", context);
+        return;
+      }
+
+      if (statusCode >= 400) {
+        logger.warn("api.request.completed", context);
+        return;
+      }
+
+      logger.info("api.request.completed", context);
+    });
+
+    next();
+  };
 }
 
 function securityHeadersMiddleware(env: ServerEnv) {
@@ -129,6 +173,12 @@ function sanitizeRequestId(value: string | undefined) {
 
 function isUnsafeMethod(method: string | undefined) {
   return !["GET", "HEAD", "OPTIONS"].includes((method ?? "GET").toUpperCase());
+}
+
+function requestPath(request: MiddlewareRequest) {
+  const url = request.originalUrl ?? request.url ?? "/";
+
+  return url.split("?")[0] || "/";
 }
 
 function hasRefreshCookie(request: MiddlewareRequest) {

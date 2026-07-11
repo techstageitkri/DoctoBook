@@ -20,6 +20,7 @@ import {
   createPaymentProviderFromEnv,
   parseGatewayResponse
 } from "@doctobook/payments";
+import { createLogger } from "@doctobook/observability";
 import { AuthenticatedUser } from "../auth/auth.types.js";
 import { PrismaService } from "../database/prisma.service.js";
 import { NotificationService } from "../notifications/notification.service.js";
@@ -28,6 +29,11 @@ const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}
 
 @Injectable()
 export class PaymentService {
+  private readonly logger = createLogger({
+    service: "api",
+    environment: process.env.NODE_ENV ?? "development"
+  });
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationService: NotificationService
@@ -104,6 +110,13 @@ export class PaymentService {
       verified = await provider.verifyWebhook({ payload, headers });
     } catch (error) {
       await this.persistInvalidWebhook(provider.name, payload, error);
+      this.logger.error(
+        "payment.webhook.verification_failed",
+        {
+          provider: provider.name
+        },
+        error
+      );
       this.throwWebhookVerificationError(error);
       throw error;
     }
@@ -234,6 +247,17 @@ export class PaymentService {
       });
     });
     await this.enqueueWebhookNotification(verified.internalPaymentId, result);
+    this.logger.info("payment.webhook.processed", {
+      provider: verified.provider,
+      providerEventId: verified.providerEventId,
+      providerPaymentId: verified.providerPaymentId ?? null,
+      paymentId: verified.internalPaymentId,
+      status: verified.status,
+      rawStatus: verified.rawStatus,
+      duplicate: "duplicate" in result ? result.duplicate === true : false,
+      rejected: "rejected" in result ? result.rejected === true : false,
+      processed: result.processed
+    });
 
     return result;
   }
@@ -993,7 +1017,7 @@ export class PaymentService {
     try {
       await action();
     } catch (error) {
-      console.warn("Notification enqueue failed", error);
+      this.logger.error("notification.enqueue_failed", {}, error);
     }
   }
 }

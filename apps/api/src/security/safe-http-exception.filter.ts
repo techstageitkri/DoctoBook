@@ -5,6 +5,7 @@ import {
   HttpException,
   HttpStatus
 } from "@nestjs/common";
+import { JsonLogger } from "@doctobook/observability";
 
 type ErrorRequest = {
   id?: string;
@@ -20,6 +21,8 @@ type ErrorResponse = {
 
 @Catch()
 export class SafeHttpExceptionFilter implements ExceptionFilter {
+  constructor(private readonly logger?: JsonLogger) {}
+
   catch(exception: unknown, host: ArgumentsHost) {
     const context = host.switchToHttp();
     const request = context.getRequest<ErrorRequest>();
@@ -29,6 +32,25 @@ export class SafeHttpExceptionFilter implements ExceptionFilter {
         ? exception.getStatus()
         : HttpStatus.INTERNAL_SERVER_ERROR;
     const details = exception instanceof HttpException ? this.httpDetails(exception) : {};
+
+    if (statusCode >= 500) {
+      this.logger?.error(
+        "api.exception",
+        {
+          requestId: request.id ?? null,
+          route: request.originalUrl ?? request.url ?? null,
+          statusCode
+        },
+        exception
+      );
+    } else if (statusCode >= 400) {
+      this.logger?.warn("api.exception", {
+        requestId: request.id ?? null,
+        route: request.originalUrl ?? request.url ?? null,
+        statusCode,
+        ...details
+      });
+    }
 
     response.status(statusCode).json({
       statusCode,

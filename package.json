@@ -8,6 +8,7 @@
     "dev": "turbo dev --parallel",
     "lint": "turbo lint",
     "test": "turbo test",
+    "test:e2e": "pnpm --filter @doctobook/e2e test",
     "typecheck": "turbo typecheck",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md,yml,yaml}\"",
     "db:generate": "pnpm --filter @doctobook/database prisma:generate",

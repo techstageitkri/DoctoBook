@@ -10,8 +10,14 @@ export type E2EConfig = {
   patientPassword: string | null;
   doctorId: string | null;
   serviceId: string | null;
+  onlineDoctorId: string | null;
+  onlineServiceId: string | null;
   payhereMerchantId: string | null;
+  payhereMerchantSecret: string | null;
+  payhereWebhookSuccess: boolean;
+  databaseUrl: string | null;
   bookingDate: string;
+  onlineBookingDate: string;
 };
 
 export const e2eConfig: E2EConfig = {
@@ -30,8 +36,15 @@ export const e2eConfig: E2EConfig = {
   patientPassword: optionalEnv("E2E_PATIENT_PASSWORD"),
   doctorId: optionalEnv("E2E_DOCTOR_ID"),
   serviceId: optionalEnv("E2E_SERVICE_ID"),
+  onlineDoctorId: optionalEnv("E2E_ONLINE_DOCTOR_ID") ?? optionalEnv("E2E_DOCTOR_ID"),
+  onlineServiceId: optionalEnv("E2E_ONLINE_SERVICE_ID"),
   payhereMerchantId: optionalEnv("E2E_PAYHERE_MERCHANT_ID"),
-  bookingDate: process.env.E2E_BOOKING_DATE ?? tomorrowYmd()
+  payhereMerchantSecret: optionalEnv("E2E_PAYHERE_MERCHANT_SECRET"),
+  payhereWebhookSuccess: process.env.E2E_PAYHERE_WEBHOOK_SUCCESS === "true",
+  databaseUrl: optionalEnv("E2E_DATABASE_URL"),
+  bookingDate: process.env.E2E_BOOKING_DATE ?? tomorrowYmd(),
+  onlineBookingDate:
+    process.env.E2E_ONLINE_BOOKING_DATE ?? process.env.E2E_BOOKING_DATE ?? tomorrowYmd()
 };
 
 export function apiUrl(path: string) {
@@ -44,6 +57,10 @@ export function hasPatientCredentials() {
 
 export function hasBookingFixture() {
   return Boolean(e2eConfig.doctorId && e2eConfig.serviceId);
+}
+
+export function hasOnlinePaymentFixture() {
+  return Boolean(e2eConfig.onlineDoctorId && e2eConfig.onlineServiceId);
 }
 
 function optionalEnv(key: string) {

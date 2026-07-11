@@ -111,6 +111,9 @@ importers:
 
   apps/e2e:
     devDependencies:
+      '@doctobook/database':
+        specifier: workspace:*
+        version: link:../../packages/database
       '@playwright/test':
         specifier: ^1.57.0
         version: 1.61.1

@@ -1,11 +1,43 @@
 const path = require("node:path");
+const fs = require("node:fs");
 
 const rootDir = path.resolve(__dirname, "../..");
-const webHost = process.env.WEB_HOST || "127.0.0.1";
-const webPort = process.env.WEB_PORT || "3002";
-const apiHost = process.env.API_HOST || "127.0.0.1";
-const apiPort = process.env.API_PORT || "4001";
+const envFile = loadEnvFile(path.join(rootDir, ".env"));
+const webHost = process.env.WEB_HOST || envFile.WEB_HOST || "127.0.0.1";
+const webPort = process.env.WEB_PORT || envFile.WEB_PORT || "3002";
+const apiHost = process.env.API_HOST || envFile.API_HOST || "127.0.0.1";
+const apiPort = process.env.API_PORT || envFile.API_PORT || "4001";
 const nodeEnv = "production";
+
+function loadEnvFile(filePath) {
+  if (!fs.existsSync(filePath)) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    fs
+      .readFileSync(filePath, "utf8")
+      .split(/\r?\n/u)
+      .flatMap((line) => {
+        const trimmed = line.trim();
+
+        if (!trimmed || trimmed.startsWith("#")) {
+          return [];
+        }
+
+        const match = trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/u);
+
+        if (!match) {
+          return [];
+        }
+
+        const [, key, rawValue] = match;
+        const value = rawValue.trim().replace(/^(['"])(.*)\1$/u, "$2");
+
+        return [[key, value]];
+      })
+  );
+}
 
 const common = {
   cwd: rootDir,
@@ -18,6 +50,7 @@ const common = {
   time: true,
   merge_logs: false,
   env: {
+    ...envFile,
     NODE_ENV: nodeEnv
   }
 };

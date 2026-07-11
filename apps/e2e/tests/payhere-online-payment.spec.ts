@@ -362,6 +362,10 @@ function assertCheckoutMetadata(
       currency: "LKR",
       custom_1: expected.appointmentId,
       custom_2: expected.patientId,
+      phone: expect.any(String),
+      address: expect.any(String),
+      city: expect.any(String),
+      country: expect.any(String),
       hash: expect.any(String)
     })
   );

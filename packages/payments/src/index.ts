@@ -122,7 +122,11 @@ export function createPaymentProviderFromEnv(env: NodeJS.ProcessEnv = process.en
       returnUrl: env.PAYMENT_RETURN_URL ?? "http://localhost:3000/patient/payments/return",
       cancelUrl: env.PAYMENT_CANCEL_URL ?? "http://localhost:3000/patient/payments/cancel",
       notifyUrl:
-        env.PAYHERE_NOTIFY_URL ?? "http://localhost:4000/v1/payments/webhooks/payhere"
+        env.PAYHERE_NOTIFY_URL ?? "http://localhost:4000/v1/payments/webhooks/payhere",
+      defaultPhone: env.PAYHERE_DEFAULT_PHONE ?? "0771234567",
+      defaultAddress: env.PAYHERE_DEFAULT_ADDRESS ?? "N/A",
+      defaultCity: env.PAYHERE_DEFAULT_CITY ?? "Colombo",
+      defaultCountry: env.PAYHERE_DEFAULT_COUNTRY ?? "Sri Lanka"
     });
   }
 
@@ -563,6 +567,10 @@ export type PayHereConfig = {
   returnUrl: string;
   cancelUrl: string;
   notifyUrl: string;
+  defaultPhone: string;
+  defaultAddress: string;
+  defaultCity: string;
+  defaultCountry: string;
 };
 
 export class PayHerePaymentProvider implements PaymentProvider {
@@ -584,7 +592,10 @@ export class PayHerePaymentProvider implements PaymentProvider {
       first_name: firstName(input.patientName),
       last_name: lastName(input.patientName),
       email: input.patientEmail ?? "",
-      phone: input.patientPhone ?? "",
+      phone: input.patientPhone?.trim() || this.config.defaultPhone,
+      address: this.config.defaultAddress,
+      city: this.config.defaultCity,
+      country: this.config.defaultCountry,
       custom_1: input.appointmentId,
       custom_2: input.patientId,
       hash: createPayHereCheckoutHash({

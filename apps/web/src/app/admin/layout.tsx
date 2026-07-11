@@ -1,10 +1,11 @@
 import { APP_NAME } from "@doctobook/shared";
+import { getPublicApiUrl } from "../public-api-url";
 import { AdminShell } from "./admin-shell";
 
 export default function AdminLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <AdminShell
-      apiUrl={process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000"}
+      apiUrl={getPublicApiUrl()}
       appName={APP_NAME}
     >
       {children}

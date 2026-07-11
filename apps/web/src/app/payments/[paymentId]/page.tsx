@@ -1,5 +1,6 @@
 import { APP_NAME } from "@doctobook/shared";
 import { PatientBookingPortal } from "../../patient-booking-portal";
+import { getPublicApiUrl } from "../../public-api-url";
 
 export default async function PaymentPage({
   params
@@ -10,7 +11,7 @@ export default async function PaymentPage({
 
   return (
     <PatientBookingPortal
-      apiUrl={process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000"}
+      apiUrl={getPublicApiUrl()}
       appName={APP_NAME}
       initialPaymentId={paymentId}
       initialView="payment"

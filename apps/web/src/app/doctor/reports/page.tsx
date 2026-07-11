@@ -1,10 +1,11 @@
 import { APP_NAME } from "@doctobook/shared";
 import { ReportDashboard } from "../../report-dashboard";
+import { getPublicApiUrl } from "../../public-api-url";
 
 export default function DoctorReportsPage() {
   return (
     <ReportDashboard
-      apiUrl={process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000"}
+      apiUrl={getPublicApiUrl()}
       appName={APP_NAME}
       mode="doctor"
     />

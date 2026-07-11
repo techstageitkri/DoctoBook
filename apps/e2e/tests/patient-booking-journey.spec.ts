@@ -99,6 +99,13 @@ test.describe("critical patient booking journey", () => {
       })
     );
 
+    const availabilityAfterBooking = await getAvailableSlots(request);
+    expect(
+      availabilityAfterBooking.availability.some(
+        (availableSlot) => availableSlot.slotId === slot.slotId
+      )
+    ).toBe(false);
+
     if (booking.status === "pending_payment") {
       const paymentResponse = await request.get(
         apiUrl(`/v1/patient/appointments/${booking.appointmentId}/payment`),

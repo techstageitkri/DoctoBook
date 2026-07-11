@@ -19,7 +19,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:seed": "tsx prisma/seed.ts"
+    "prisma:seed": "tsx prisma/seed.ts",
+    "fixture:booking-e2e": "tsx prisma/fixtures/booking-e2e.ts",
+    "fixture:booking-e2e:cleanup": "tsx prisma/fixtures/booking-e2e.ts cleanup"
   },
   "dependencies": {
     "@prisma/client": "6.19.3"

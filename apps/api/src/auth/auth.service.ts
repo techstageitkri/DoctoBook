@@ -26,6 +26,7 @@ import {
 import { AuthenticatedUser, RequestContext } from "./auth.types.js";
 import { PasswordService } from "./password.service.js";
 import { TokenService } from "./token.service.js";
+import { refreshTokenTtlDays } from "./auth.cookies.js";
 
 type UserForAuth = Prisma.UserGetPayload<{
   include: {
@@ -51,7 +52,6 @@ type TokenResponse = {
 };
 
 const accessTokenTtlSeconds = 15 * 60;
-const refreshTokenTtlDays = 30;
 
 @Injectable()
 export class AuthService {
@@ -319,6 +319,37 @@ export class AuthService {
         ...session,
         current: session.id === user.sessionId
       }))
+    };
+  }
+
+  async me(user: AuthenticatedUser) {
+    const storedUser = await this.prisma.user.findUnique({
+      where: { id: user.id },
+      include: {
+        roles: {
+          include: {
+            role: true
+          }
+        }
+      }
+    });
+
+    if (
+      !storedUser ||
+      storedUser.status !== UserStatus.ACTIVE ||
+      storedUser.deletedAt
+    ) {
+      throw new UnauthorizedException("Session is no longer active");
+    }
+
+    return {
+      user: {
+        id: storedUser.id,
+        email: storedUser.email,
+        fullName: storedUser.fullName,
+        status: storedUser.status,
+        roles: this.getRoleCodes(storedUser)
+      }
     };
   }
 

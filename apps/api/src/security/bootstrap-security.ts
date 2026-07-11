@@ -3,9 +3,12 @@ import { IncomingMessage, ServerResponse } from "node:http";
 import { json, urlencoded } from "express";
 import { INestApplication } from "@nestjs/common";
 import { ServerEnv } from "@doctobook/config";
+import { refreshCookieName } from "../auth/auth.cookies.js";
 
 type MiddlewareRequest = IncomingMessage & {
   id?: string;
+  originalUrl?: string;
+  url?: string;
 };
 
 type NextFunction = () => void;
@@ -19,6 +22,7 @@ export function configureRequestHardening(app: INestApplication, env: ServerEnv)
 
   app.use(requestIdMiddleware);
   app.use(securityHeadersMiddleware(env));
+  app.use(cookieAuthenticatedCsrfMiddleware(env));
   app.use("/v1/payments/webhooks", json({ limit: env.API_WEBHOOK_BODY_LIMIT }));
   app.use("/v1/payments/webhooks", urlencoded({ extended: false, limit: env.API_WEBHOOK_BODY_LIMIT }));
   app.use(json({ limit: env.API_BODY_LIMIT }));
@@ -47,6 +51,10 @@ export function isCorsOriginAllowed(origin: string | undefined, env: ServerEnv) 
   }
 
   return corsOrigins(env).includes(origin);
+}
+
+export function isCookieCsrfOriginAllowed(origin: string | undefined, env: ServerEnv) {
+  return Boolean(origin && corsOrigins(env).includes(origin));
 }
 
 function requestIdMiddleware(
@@ -82,6 +90,33 @@ function securityHeadersMiddleware(env: ServerEnv) {
   };
 }
 
+function cookieAuthenticatedCsrfMiddleware(env: ServerEnv) {
+  return (request: MiddlewareRequest, response: ServerResponse, next: NextFunction) => {
+    if (!isUnsafeMethod(request.method) || !hasRefreshCookie(request)) {
+      next();
+      return;
+    }
+
+    const origin = headerValue(request.headers.origin) ?? refererOrigin(request);
+
+    if (isCookieCsrfOriginAllowed(origin, env)) {
+      next();
+      return;
+    }
+
+    response.statusCode = 403;
+    response.setHeader("content-type", "application/json; charset=utf-8");
+    response.end(
+      JSON.stringify({
+        statusCode: 403,
+        code: "CSRF_ORIGIN_DENIED",
+        message: "Cross-site cookie request rejected",
+        requestId: request.id ?? null
+      })
+    );
+  };
+}
+
 function sanitizeRequestId(value: string | undefined) {
   const trimmed = value?.trim();
 
@@ -90,4 +125,34 @@ function sanitizeRequestId(value: string | undefined) {
   }
 
   return trimmed;
+}
+
+function isUnsafeMethod(method: string | undefined) {
+  return !["GET", "HEAD", "OPTIONS"].includes((method ?? "GET").toUpperCase());
+}
+
+function hasRefreshCookie(request: MiddlewareRequest) {
+  return Boolean(
+    headerValue(request.headers.cookie)
+      ?.split(";")
+      .some((cookie) => cookie.trim().startsWith(`${refreshCookieName}=`))
+  );
+}
+
+function refererOrigin(request: MiddlewareRequest) {
+  const referer = headerValue(request.headers.referer);
+
+  if (!referer) {
+    return undefined;
+  }
+
+  try {
+    return new URL(referer).origin;
+  } catch {
+    return undefined;
+  }
+}
+
+function headerValue(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
 }

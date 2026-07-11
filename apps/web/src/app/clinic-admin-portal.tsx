@@ -180,7 +180,7 @@ export function ClinicAdminPortal({ apiUrl, appName }: { apiUrl: string; appName
   }, [clinics]);
 
   useEffect(() => {
-    const storedToken = window.localStorage.getItem("doctobook_access_token");
+    const storedToken = window.sessionStorage.getItem("doctobook_access_token");
 
     if (storedToken) {
       setAccessToken(storedToken);
@@ -189,7 +189,7 @@ export function ClinicAdminPortal({ apiUrl, appName }: { apiUrl: string; appName
 
   useEffect(() => {
     if (accessToken) {
-      window.localStorage.setItem("doctobook_access_token", accessToken);
+      window.sessionStorage.setItem("doctobook_access_token", accessToken);
     }
   }, [accessToken]);
 

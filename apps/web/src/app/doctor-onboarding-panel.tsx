@@ -118,7 +118,7 @@ export function DoctorOnboardingPanel({
   );
 
   useEffect(() => {
-    const storedDoctorToken = window.localStorage.getItem("doctobook_doctor_access_token");
+    const storedDoctorToken = window.sessionStorage.getItem("doctobook_doctor_access_token");
 
     if (storedDoctorToken) {
       setDoctorToken(storedDoctorToken);
@@ -129,7 +129,7 @@ export function DoctorOnboardingPanel({
 
   useEffect(() => {
     if (doctorToken) {
-      window.localStorage.setItem("doctobook_doctor_access_token", doctorToken);
+      window.sessionStorage.setItem("doctobook_doctor_access_token", doctorToken);
     }
   }, [doctorToken]);
 

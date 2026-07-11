@@ -26,6 +26,12 @@ export const refreshSchema = z.strictObject({
 
 export const logoutSchema = refreshSchema;
 
+export const browserRefreshSchema = z.strictObject({
+  refreshToken: z.string().min(32).optional()
+});
+
+export const browserLogoutSchema = browserRefreshSchema;
+
 export const requestEmailVerificationSchema = z.strictObject({
   email: emailSchema
 });
@@ -52,6 +58,8 @@ export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RefreshInput = z.infer<typeof refreshSchema>;
 export type LogoutInput = z.infer<typeof logoutSchema>;
+export type BrowserRefreshInput = z.infer<typeof browserRefreshSchema>;
+export type BrowserLogoutInput = z.infer<typeof browserLogoutSchema>;
 export type RequestEmailVerificationInput = z.infer<typeof requestEmailVerificationSchema>;
 export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;

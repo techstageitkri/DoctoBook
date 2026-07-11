@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { parseServerEnv } from "@doctobook/config";
 import { loginSchema } from "../src/auth/auth.schemas.js";
-import { corsOrigins, isCorsOriginAllowed } from "../src/security/bootstrap-security.js";
+import {
+  corsOrigins,
+  isCookieCsrfOriginAllowed,
+  isCorsOriginAllowed
+} from "../src/security/bootstrap-security.js";
 
 const baseEnv = {
   DATABASE_URL: "postgresql://user:pass@localhost:5432/doctobook",
@@ -35,6 +39,9 @@ describe("security hardening", () => {
     expect(isCorsOriginAllowed("https://app.doctobook.test", env)).toBe(true);
     expect(isCorsOriginAllowed("https://evil.example", env)).toBe(false);
     expect(isCorsOriginAllowed(undefined, env)).toBe(true);
+    expect(isCookieCsrfOriginAllowed("https://app.doctobook.test", env)).toBe(true);
+    expect(isCookieCsrfOriginAllowed("https://evil.example", env)).toBe(false);
+    expect(isCookieCsrfOriginAllowed(undefined, env)).toBe(false);
   });
 
   it("rejects unknown request fields in auth schemas", () => {

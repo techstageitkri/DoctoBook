@@ -90,7 +90,7 @@ type AvailabilitySlot = {
 
 type AuthSession = {
   accessToken: string;
-  refreshToken: string;
+  expiresInSeconds: number;
   user: {
     id: string;
     email: string | null;
@@ -320,8 +320,6 @@ type PatientBookingPortalProps = {
   initialView?: ViewMode;
 };
 
-const patientTokenKey = "doctobook_patient_access_token";
-const patientRefreshTokenKey = "doctobook_patient_refresh_token";
 const bookingAttemptKey = "doctobook_patient_booking_attempt";
 const paymentMapPrefix = "doctobook_payment_appointment:";
 const rescheduleAttemptPrefix = "doctobook_reschedule_attempt:";
@@ -441,22 +439,7 @@ export function PatientBookingPortal({
   }, [booking, paymentStatus]);
 
   useEffect(() => {
-    const accessToken = window.localStorage.getItem(patientTokenKey);
-    const refreshToken = window.localStorage.getItem(patientRefreshTokenKey);
-
-    if (accessToken) {
-      setSession({
-        accessToken,
-        refreshToken: refreshToken ?? "",
-        user: {
-          id: "",
-          email: null,
-          fullName: "Patient",
-          roles: ["patient"]
-        }
-      });
-    }
-
+    void restorePatientSession();
     void loadReferenceData();
     void loadDoctors();
   }, []);
@@ -506,18 +489,6 @@ export function PatientBookingPortal({
       setViewMode("payment");
     }
   }, [initialAppointmentId]);
-
-  useEffect(() => {
-    if (session?.accessToken) {
-      window.localStorage.setItem(patientTokenKey, session.accessToken);
-
-      if (session.refreshToken) {
-        window.localStorage.setItem(patientRefreshTokenKey, session.refreshToken);
-      }
-
-      void loadPatientProfile(session.accessToken);
-    }
-  }, [session?.accessToken, session?.refreshToken]);
 
   useEffect(() => {
     if (selectedDoctorService) {
@@ -936,7 +907,7 @@ export function PatientBookingPortal({
       if (authMode === "register") {
         const registerResponse = await publicRequest<{
           verificationToken?: string;
-        }>("/auth/register", {
+        }>("/v1/auth/register", {
           method: "POST",
           body: JSON.stringify({
             accountType: "patient",
@@ -948,14 +919,14 @@ export function PatientBookingPortal({
         });
 
         if (registerResponse.verificationToken) {
-          await publicRequest("/auth/email-verification/confirm", {
+          await publicRequest("/v1/auth/email-verification/confirm", {
             method: "POST",
             body: JSON.stringify({ token: registerResponse.verificationToken })
           });
         }
       }
 
-      const loginResponse = await publicRequest<AuthSession>("/auth/login", {
+      const loginResponse = await publicRequest<AuthSession>("/v1/auth/login", {
         method: "POST",
         body: JSON.stringify({
           email: authForm.email,
@@ -1056,9 +1027,24 @@ export function PatientBookingPortal({
     await runAction(action, "");
   }
 
+  async function restorePatientSession() {
+    const restored = await publicRequest<AuthSession>("/v1/auth/refresh", {
+      method: "POST",
+      body: JSON.stringify({})
+    }).catch(() => null);
+
+    if (!restored?.accessToken) {
+      return;
+    }
+
+    setSession(restored);
+    await loadPatientProfile(restored.accessToken);
+  }
+
   async function publicRequest<T>(path: string, options: RequestInit = {}) {
     const response = await fetch(`${apiUrl}${path}`, {
       ...options,
+      credentials: "include",
       headers: {
         "Content-Type": "application/json",
         ...(options.headers ?? {})
@@ -1071,6 +1057,7 @@ export function PatientBookingPortal({
   async function tokenRequest<T>(path: string, token: string, options: RequestInit = {}) {
     const response = await fetch(`${apiUrl}${path}`, {
       ...options,
+      credentials: "include",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
@@ -1168,8 +1155,10 @@ export function PatientBookingPortal({
   }
 
   function logout() {
-    window.localStorage.removeItem(patientTokenKey);
-    window.localStorage.removeItem(patientRefreshTokenKey);
+    void publicRequest("/v1/auth/logout", {
+      method: "POST",
+      body: JSON.stringify({})
+    }).catch(() => null);
     setSession(null);
     setPatient(null);
   }

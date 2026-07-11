@@ -158,7 +158,7 @@ export function ReportDashboard({
   }, [clinicId, mode]);
 
   useEffect(() => {
-    const storedToken = window.localStorage.getItem(tokenStorageKey);
+    const storedToken = window.sessionStorage.getItem(tokenStorageKey);
 
     if (storedToken) {
       setAccessToken(storedToken);
@@ -167,7 +167,7 @@ export function ReportDashboard({
 
   useEffect(() => {
     if (accessToken) {
-      window.localStorage.setItem(tokenStorageKey, accessToken);
+      window.sessionStorage.setItem(tokenStorageKey, accessToken);
     }
   }, [accessToken, tokenStorageKey]);
 

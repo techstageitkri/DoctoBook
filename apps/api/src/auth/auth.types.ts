@@ -21,6 +21,8 @@ export type RequestContext = {
 export type RequestWithUser = {
   headers: Record<string, string | string[] | undefined>;
   ip?: string;
+  originalUrl?: string;
+  url?: string;
   get?: (name: string) => string | undefined;
   user?: AuthenticatedUser;
 };

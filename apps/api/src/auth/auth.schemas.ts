@@ -3,7 +3,7 @@ import { z } from "zod";
 const emailSchema = z.string().email().trim().toLowerCase();
 const passwordSchema = z.string().min(8).max(256);
 
-export const registerSchema = z.object({
+export const registerSchema = z.strictObject({
   accountType: z.enum(["patient", "doctor"]).default("patient"),
   email: emailSchema,
   phone: z.string().trim().min(7).max(32).optional(),
@@ -13,37 +13,37 @@ export const registerSchema = z.object({
   deviceName: z.string().trim().max(160).optional()
 });
 
-export const loginSchema = z.object({
+export const loginSchema = z.strictObject({
   email: emailSchema,
   password: passwordSchema,
   deviceId: z.string().trim().max(120).optional(),
   deviceName: z.string().trim().max(160).optional()
 });
 
-export const refreshSchema = z.object({
+export const refreshSchema = z.strictObject({
   refreshToken: z.string().min(32)
 });
 
 export const logoutSchema = refreshSchema;
 
-export const requestEmailVerificationSchema = z.object({
+export const requestEmailVerificationSchema = z.strictObject({
   email: emailSchema
 });
 
-export const verifyEmailSchema = z.object({
+export const verifyEmailSchema = z.strictObject({
   token: z.string().min(32)
 });
 
-export const forgotPasswordSchema = z.object({
+export const forgotPasswordSchema = z.strictObject({
   email: emailSchema
 });
 
-export const resetPasswordSchema = z.object({
+export const resetPasswordSchema = z.strictObject({
   token: z.string().min(32),
   newPassword: passwordSchema
 });
 
-export const changePasswordSchema = z.object({
+export const changePasswordSchema = z.strictObject({
   currentPassword: passwordSchema,
   newPassword: passwordSchema
 });

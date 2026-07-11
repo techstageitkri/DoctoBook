@@ -15,6 +15,7 @@ import { AuditService } from "../audit/audit.service.js";
 import { AuthenticatedUser, RequestContext } from "../auth/auth.types.js";
 import { AuthorizationService } from "../authorization/authorization.service.js";
 import { PrismaService } from "../database/prisma.service.js";
+import { SlotQueueService } from "../slots/slot-queue.service.js";
 import {
   CreateClinicServiceInput,
   CreateDoctorClinicServiceInput,
@@ -29,7 +30,8 @@ export class AppointmentServiceConfigService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly authorizationService: AuthorizationService,
-    private readonly auditService: AuditService
+    private readonly auditService: AuditService,
+    private readonly slotQueueService: SlotQueueService
   ) {}
 
   async listMasterServices() {
@@ -169,6 +171,8 @@ export class AppointmentServiceConfigService {
         afterData: this.toJson(clinicService)
       });
 
+      await this.slotQueueService.enqueueClinicService(clinicService.id, { reason: "service_changed" });
+
       return clinicService;
     } catch (error) {
       this.throwIfUniqueConflict(error, "Service is already enabled for this clinic");
@@ -207,6 +211,8 @@ export class AppointmentServiceConfigService {
       userAgent: context.userAgent,
       afterData: this.toJson(clinicService)
     });
+
+    await this.slotQueueService.enqueueClinicService(clinicService.id, { reason: "service_changed" });
 
     return clinicService;
   }
@@ -350,6 +356,8 @@ export class AppointmentServiceConfigService {
         afterData: this.toAuditJson(doctorClinicService)
       });
 
+      await this.slotQueueService.enqueueAssociation(association.id, { reason: "service_changed" });
+
       return this.serializeDoctorClinicService(doctorClinicService);
     } catch (error) {
       this.throwIfUniqueConflict(error, "Doctor service is already configured for this clinic service");
@@ -399,6 +407,10 @@ export class AppointmentServiceConfigService {
       afterData: this.toAuditJson(doctorClinicService)
     });
 
+    await this.slotQueueService.enqueueAssociation(doctorClinicService.doctorClinicId, {
+      reason: "service_changed"
+    });
+
     return this.serializeDoctorClinicService(doctorClinicService);
   }
 
@@ -425,6 +437,10 @@ export class AppointmentServiceConfigService {
       clinicId: doctorClinicService.doctorClinic.clinicId,
       ipAddress: context.ipAddress,
       userAgent: context.userAgent
+    });
+
+    await this.slotQueueService.enqueueAssociation(doctorClinicService.doctorClinicId, {
+      reason: "service_changed"
     });
 
     return this.serializeDoctorClinicService(doctorClinicService);

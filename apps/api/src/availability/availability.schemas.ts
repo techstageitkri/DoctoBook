@@ -4,7 +4,7 @@ const uuidSchema = z.string().uuid();
 const timeSchema = z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/);
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
-export const createAvailabilityRuleSchema = z.object({
+export const createAvailabilityRuleSchema = z.strictObject({
   dayOfWeek: z.number().int().min(0).max(6),
   startsAt: timeSchema,
   endsAt: timeSchema,
@@ -15,7 +15,7 @@ export const createAvailabilityRuleSchema = z.object({
   isActive: z.boolean().default(true)
 });
 
-export const updateAvailabilityRuleSchema = z.object({
+export const updateAvailabilityRuleSchema = z.strictObject({
   dayOfWeek: z.number().int().min(0).max(6).optional(),
   startsAt: timeSchema.optional(),
   endsAt: timeSchema.optional(),
@@ -26,12 +26,12 @@ export const updateAvailabilityRuleSchema = z.object({
   isActive: z.boolean().optional()
 });
 
-export const createAvailabilityBreakSchema = z.object({
+export const createAvailabilityBreakSchema = z.strictObject({
   startsAt: timeSchema,
   endsAt: timeSchema
 });
 
-export const createDoctorTimeOffSchema = z.object({
+export const createDoctorTimeOffSchema = z.strictObject({
   startsAt: z.string().datetime({ offset: true }),
   endsAt: z.string().datetime({ offset: true }),
   doctorClinicServiceId: uuidSchema.optional().nullable(),

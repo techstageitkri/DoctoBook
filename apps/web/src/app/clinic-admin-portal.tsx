@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { AppointmentOperationsPanel } from "./appointment-operations-panel";
 import { DoctorAvailabilityPanel } from "./doctor-availability-panel";
 import { DoctorOnboardingPanel } from "./doctor-onboarding-panel";
+import { RefundRecoveryPanel } from "./refund-recovery-panel";
+import { ReviewModerationPanel } from "./review-moderation-panel";
 import { ServiceConfigurationPanel } from "./service-configuration-panel";
 
 type ClinicStatus = "DRAFT" | "PENDING_APPROVAL" | "ACTIVE" | "SUSPENDED" | "CLOSED";
@@ -489,6 +492,15 @@ export function ClinicAdminPortal({ apiUrl, appName }: { apiUrl: string; appName
           </a>
           <a className="nav-item" href="#availability">
             Availability
+          </a>
+          <a className="nav-item" href="#appointments">
+            Appointments
+          </a>
+          <a className="nav-item" href="#reviews">
+            Reviews
+          </a>
+          <a className="nav-item" href="#refunds">
+            Refunds
           </a>
         </nav>
       </aside>
@@ -1006,6 +1018,13 @@ export function ClinicAdminPortal({ apiUrl, appName }: { apiUrl: string; appName
           accessToken={accessToken}
           selectedClinicId={selectedClinicId}
         />
+        <AppointmentOperationsPanel
+          apiUrl={apiUrl}
+          accessToken={accessToken}
+          selectedClinicId={selectedClinicId}
+        />
+        <ReviewModerationPanel apiUrl={apiUrl} accessToken={accessToken} />
+        <RefundRecoveryPanel apiUrl={apiUrl} accessToken={accessToken} />
       </section>
     </main>
   );

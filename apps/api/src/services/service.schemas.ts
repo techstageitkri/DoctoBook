@@ -5,7 +5,7 @@ const uuidSchema = z.string().uuid();
 const nullableTextSchema = z.string().trim().min(1).optional().nullable();
 const paymentModeSchema = z.nativeEnum(PaymentMode).optional().nullable();
 
-export const createMasterServiceSchema = z.object({
+export const createMasterServiceSchema = z.strictObject({
   name: z.string().trim().min(2).max(140),
   slug: z
     .string()
@@ -20,20 +20,20 @@ export const createMasterServiceSchema = z.object({
 
 export const updateMasterServiceSchema = createMasterServiceSchema.partial();
 
-export const createClinicServiceSchema = z.object({
+export const createClinicServiceSchema = z.strictObject({
   serviceId: uuidSchema,
   displayName: z.string().trim().min(1).max(160).optional().nullable(),
   description: nullableTextSchema,
   isActive: z.boolean().default(true)
 });
 
-export const updateClinicServiceSchema = z.object({
+export const updateClinicServiceSchema = z.strictObject({
   displayName: z.string().trim().min(1).max(160).optional().nullable(),
   description: nullableTextSchema,
   isActive: z.boolean().optional()
 });
 
-export const createDoctorClinicServiceSchema = z.object({
+export const createDoctorClinicServiceSchema = z.strictObject({
   clinicServiceId: uuidSchema,
   durationMinutes: z.number().int().positive().max(720),
   feeMinor: z.number().int().nonnegative().optional().nullable(),
@@ -45,7 +45,7 @@ export const createDoctorClinicServiceSchema = z.object({
   isActive: z.boolean().default(true)
 });
 
-export const updateDoctorClinicServiceSchema = z.object({
+export const updateDoctorClinicServiceSchema = z.strictObject({
   durationMinutes: z.number().int().positive().max(720).optional(),
   feeMinor: z.number().int().nonnegative().optional().nullable(),
   currency: z.string().trim().length(3).optional(),

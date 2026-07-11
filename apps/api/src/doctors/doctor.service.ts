@@ -19,6 +19,8 @@ import { PasswordService } from "../auth/password.service.js";
 import { TokenService } from "../auth/token.service.js";
 import { AuthorizationService } from "../authorization/authorization.service.js";
 import { PrismaService } from "../database/prisma.service.js";
+import { NotificationService } from "../notifications/notification.service.js";
+import { SlotQueueService } from "../slots/slot-queue.service.js";
 import {
   AssociationDecisionInput,
   ClinicDocumentReviewInput,
@@ -41,7 +43,9 @@ export class DoctorService {
     private readonly auditService: AuditService,
     private readonly passwordService: PasswordService,
     private readonly tokenService: TokenService,
-    private readonly authService: AuthService
+    private readonly authService: AuthService,
+    private readonly slotQueueService: SlotQueueService,
+    private readonly notificationService: NotificationService
   ) {}
 
   async registerDoctor(input: RegisterDoctorInput, context: RequestContext) {
@@ -135,6 +139,19 @@ export class DoctorService {
       userAgent: context.userAgent,
       metadata: { specialtyCount: input.specialtyIds.length }
     });
+    await this.safeNotify(() =>
+      this.notificationService.enqueueUserEvent({
+        eventCode: "auth.email_verification",
+        userId: result.user.id,
+        variables: {
+          verification: {
+            token: this.exposeDevelopmentToken(result.verificationToken) ?? "",
+            expiresInMinutes: 60
+          }
+        },
+        idempotencyKeySuffix: result.verificationToken
+      })
+    );
 
     return this.serialize({
       user: result.user,
@@ -370,6 +387,20 @@ export class DoctorService {
     });
 
     await this.auditDoctorStatus(actor, updated.id, "doctor.approve", context);
+    await this.slotQueueService.enqueueDoctor(updated.id, { reason: "doctor_clinic_changed" });
+    await this.safeNotify(() =>
+      this.notificationService.enqueueUserEvent({
+        eventCode: "doctor.approved",
+        userId: updated.userId,
+        variables: {
+          doctor: {
+            id: updated.id,
+            name: updated.user.fullName
+          }
+        },
+        idempotencyKeySuffix: updated.approvedAt?.toISOString() ?? updated.id
+      })
+    );
 
     return this.serialize(updated);
   }
@@ -401,6 +432,21 @@ export class DoctorService {
     await this.auditDoctorStatus(actor, updated.id, "doctor.reject", context, {
       reason: input.reason
     });
+    await this.slotQueueService.enqueueDoctor(updated.id, { reason: "doctor_clinic_changed" });
+    await this.safeNotify(() =>
+      this.notificationService.enqueueUserEvent({
+        eventCode: "doctor.rejected",
+        userId: updated.userId,
+        variables: {
+          doctor: {
+            id: updated.id,
+            name: updated.user.fullName,
+            rejectionReason: input.reason
+          }
+        },
+        idempotencyKeySuffix: `${updated.id}|${updated.updatedAt.toISOString()}`
+      })
+    );
 
     return this.serialize(updated);
   }
@@ -431,6 +477,7 @@ export class DoctorService {
     await this.auditDoctorStatus(actor, updated.id, "doctor.suspend", context, {
       reason: input.reason ?? null
     });
+    await this.slotQueueService.enqueueDoctor(updated.id, { reason: "doctor_clinic_changed" });
 
     return this.serialize(updated);
   }
@@ -456,6 +503,7 @@ export class DoctorService {
     });
 
     await this.auditDoctorStatus(actor, updated.id, "doctor.reactivate", context);
+    await this.slotQueueService.enqueueDoctor(updated.id, { reason: "doctor_clinic_changed" });
 
     return this.serialize(updated);
   }
@@ -569,6 +617,8 @@ export class DoctorService {
       userAgent: context.userAgent
     });
 
+    await this.slotQueueService.enqueueAssociation(updated.id, { reason: "doctor_clinic_changed" });
+
     return this.serialize(updated);
   }
 
@@ -616,6 +666,7 @@ export class DoctorService {
     });
 
     await this.auditAssociationDecision(actor, updated.id, "doctor_clinic.approve", context);
+    await this.slotQueueService.enqueueAssociation(updated.id, { reason: "doctor_clinic_changed" });
 
     return this.serialize(updated);
   }
@@ -643,6 +694,7 @@ export class DoctorService {
     await this.auditAssociationDecision(actor, updated.id, "doctor_clinic.reject", context, {
       reason: input.reason ?? null
     });
+    await this.slotQueueService.enqueueAssociation(updated.id, { reason: "doctor_clinic_changed" });
 
     return this.serialize(updated);
   }
@@ -1055,6 +1107,14 @@ export class DoctorService {
 
   private exposeDevelopmentToken(token: string) {
     return process.env.NODE_ENV === "production" ? undefined : token;
+  }
+
+  private async safeNotify(action: () => Promise<unknown>) {
+    try {
+      await action();
+    } catch (error) {
+      console.warn("Notification enqueue failed", error);
+    }
   }
 
   private addMinutes(date: Date, minutes: number) {

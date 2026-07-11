@@ -13,13 +13,17 @@
   "dependencies": {
     "@doctobook/config": "workspace:*",
     "@doctobook/database": "workspace:*",
+    "@doctobook/notifications": "workspace:*",
+    "@doctobook/payments": "workspace:*",
     "@doctobook/shared": "workspace:*",
+    "@doctobook/slots": "workspace:*",
     "@nestjs/common": "latest",
     "@nestjs/config": "latest",
     "@nestjs/core": "latest",
     "@nestjs/jwt": "^11.0.2",
     "@nestjs/platform-express": "latest",
     "bullmq": "latest",
+    "express": "^5.2.1",
     "ioredis": "latest",
     "reflect-metadata": "latest",
     "rxjs": "latest",
@@ -28,6 +32,7 @@
   "devDependencies": {
     "@nestjs/cli": "latest",
     "@nestjs/testing": "latest",
+    "@types/express": "^5.0.6",
     "typescript": "5.9.3",
     "vitest": "latest"
   }

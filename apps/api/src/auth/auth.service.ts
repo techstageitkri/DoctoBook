@@ -1,7 +1,9 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
+  forwardRef,
   UnauthorizedException
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
@@ -9,6 +11,7 @@ import { DoctorStatus, Prisma, UserStatus } from "@doctobook/database";
 import { parseServerEnv } from "@doctobook/config";
 import { AuditService } from "../audit/audit.service.js";
 import { PrismaService } from "../database/prisma.service.js";
+import { NotificationService } from "../notifications/notification.service.js";
 import {
   ChangePasswordInput,
   ForgotPasswordInput,
@@ -57,7 +60,9 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly passwordService: PasswordService,
     private readonly tokenService: TokenService,
-    private readonly auditService: AuditService
+    private readonly auditService: AuditService,
+    @Inject(forwardRef(() => NotificationService))
+    private readonly notificationService: NotificationService
   ) {}
 
   async register(input: RegisterInput, context: RequestContext) {
@@ -140,6 +145,19 @@ export class AuthService {
       userAgent: context.userAgent,
       metadata: { accountType: input.accountType }
     });
+    await this.safeNotify(() =>
+      this.notificationService.enqueueUserEvent({
+        eventCode: "auth.email_verification",
+        userId: result.user.id,
+        variables: {
+          verification: {
+            token: this.exposeDevelopmentToken(result.verificationToken) ?? "",
+            expiresInMinutes: 60
+          }
+        },
+        idempotencyKeySuffix: result.verificationToken
+      })
+    );
 
     return {
       user: result.user,
@@ -336,6 +354,19 @@ export class AuthService {
       ipAddress: context.ipAddress,
       userAgent: context.userAgent
     });
+    await this.safeNotify(() =>
+      this.notificationService.enqueueUserEvent({
+        eventCode: "auth.email_verification",
+        userId: user.id,
+        variables: {
+          verification: {
+            token: this.exposeDevelopmentToken(verificationToken) ?? "",
+            expiresInMinutes: 60
+          }
+        },
+        idempotencyKeySuffix: verificationToken
+      })
+    );
 
     return {
       sent: true,
@@ -432,6 +463,19 @@ export class AuthService {
       ipAddress: context.ipAddress,
       userAgent: context.userAgent
     });
+    await this.safeNotify(() =>
+      this.notificationService.enqueueUserEvent({
+        eventCode: "password.reset",
+        userId: user.id,
+        variables: {
+          passwordReset: {
+            token: this.exposeDevelopmentToken(resetToken) ?? "",
+            expiresInMinutes: 30
+          }
+        },
+        idempotencyKeySuffix: resetToken
+      })
+    );
 
     return {
       sent: true,
@@ -674,6 +718,14 @@ export class AuthService {
 
   private exposeDevelopmentToken(token: string) {
     return process.env.NODE_ENV === "production" ? undefined : token;
+  }
+
+  private async safeNotify(action: () => Promise<unknown>) {
+    try {
+      await action();
+    } catch (error) {
+      console.warn("Notification enqueue failed", error);
+    }
   }
 
   private addMinutes(date: Date, minutes: number) {

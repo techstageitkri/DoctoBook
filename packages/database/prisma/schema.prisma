@@ -94,13 +94,14 @@ enum PaymentStatus {
 }
 
 enum RefundStatus {
-  REQUESTED    @map("requested")
-  UNDER_REVIEW @map("under_review")
-  APPROVED     @map("approved")
-  REJECTED     @map("rejected")
-  PROCESSING   @map("processing")
-  PROCESSED    @map("processed")
-  FAILED       @map("failed")
+  REQUESTED               @map("requested")
+  UNDER_REVIEW            @map("under_review")
+  APPROVED                @map("approved")
+  REJECTED                @map("rejected")
+  PROCESSING              @map("processing")
+  PROCESSED               @map("processed")
+  FAILED                  @map("failed")
+  RECONCILIATION_REQUIRED @map("reconciliation_required")
 
   @@map("refund_status")
 }
@@ -237,6 +238,7 @@ model User {
   pushTokens                    UserPushToken[]
   receptionists                 Receptionist[]
   refundRequests                Refund[]                       @relation("RefundRequestedBy")
+  refundReconciliationsAssigned Refund[]                       @relation("RefundReconciliationAssignedTo")
   refundReviews                 Refund[]                       @relation("RefundReviewedBy")
   refundStatusChanged           RefundStatusHistory[]          @relation("RefundStatusHistoryActor")
   reviewedReviews               Review[]                       @relation("ReviewModerator")
@@ -880,24 +882,27 @@ model AppointmentSlot {
 }
 
 model AppointmentSlotHold {
-  id             String         @id @default(uuid()) @db.Uuid
-  slotId         String         @map("slot_id") @db.Uuid
-  userId         String         @map("user_id") @db.Uuid
-  appointmentId  String?        @map("appointment_id") @db.Uuid
-  idempotencyKey String         @unique @map("idempotency_key") @db.VarChar(160)
-  status         SlotHoldStatus @default(ACTIVE)
-  expiresAt      DateTime       @map("expires_at") @db.Timestamptz(6)
-  resolvedAt     DateTime?      @map("resolved_at") @db.Timestamptz(6)
-  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                  String         @id @default(uuid()) @db.Uuid
+  slotId              String         @map("slot_id") @db.Uuid
+  userId              String         @map("user_id") @db.Uuid
+  appointmentId       String?        @map("appointment_id") @db.Uuid
+  rescheduleRequestId String?        @map("reschedule_request_id") @db.Uuid
+  idempotencyKey      String         @unique @map("idempotency_key") @db.VarChar(160)
+  status              SlotHoldStatus @default(ACTIVE)
+  expiresAt           DateTime       @map("expires_at") @db.Timestamptz(6)
+  resolvedAt          DateTime?      @map("resolved_at") @db.Timestamptz(6)
+  createdAt           DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  appointment Appointment?    @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
-  slot        AppointmentSlot @relation(fields: [slotId], references: [id], onDelete: Cascade)
-  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appointment       Appointment?                  @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  rescheduleRequest AppointmentRescheduleRequest? @relation(fields: [rescheduleRequestId], references: [id], onDelete: SetNull)
+  slot              AppointmentSlot               @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  user              User                          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([slotId, status, expiresAt])
   @@index([userId, status])
   @@index([appointmentId])
+  @@index([rescheduleRequestId])
   @@map("appointment_slot_holds")
 }
 
@@ -928,6 +933,8 @@ model Appointment {
   attendingRelationship  String?           @map("attending_relationship") @db.VarChar(80)
   reasonForVisit         String?           @map("reason_for_visit")
   bookingNotes           String?           @map("booking_notes")
+  bookingIdempotencyKey  String?           @map("booking_idempotency_key") @db.VarChar(120)
+  bookingRequestHash     String?           @map("booking_request_hash") @db.VarChar(64)
   internalNotes          String?           @map("internal_notes")
   queueDate              DateTime?         @map("queue_date") @db.Date
   queueNumber            Int?              @map("queue_number")
@@ -969,6 +976,7 @@ model Appointment {
   @@index([clinicLocationId, queueDate, queueNumber])
   @@index([slotId])
   @@index([status, startsAt])
+  @@index([patientId, bookingIdempotencyKey])
   @@map("appointments")
 }
 
@@ -1007,6 +1015,8 @@ model AppointmentRescheduleRequest {
   currency                 String                  @default("LKR") @db.VarChar(3)
   status                   RescheduleRequestStatus @default(REQUESTED)
   reason                   String?
+  rescheduleIdempotencyKey String?                 @map("reschedule_idempotency_key") @db.VarChar(120)
+  rescheduleRequestHash    String?                 @map("reschedule_request_hash") @db.VarChar(64)
   createdAt                DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
   resolvedAt               DateTime?               @map("resolved_at") @db.Timestamptz(6)
 
@@ -1017,10 +1027,12 @@ model AppointmentRescheduleRequest {
   oldSlot          AppointmentSlot?    @relation("RescheduleOldSlot", fields: [oldSlotId], references: [id], onDelete: Restrict)
   requestedBy      User                @relation("RescheduleRequestedBy", fields: [requestedByUserId], references: [id], onDelete: Restrict)
 
+  holds    AppointmentSlotHold[]
   payments Payment[]
 
   @@index([appointmentId, createdAt])
   @@index([status, createdAt])
+  @@index([appointmentId, rescheduleIdempotencyKey])
   @@map("appointment_reschedule_requests")
 }
 
@@ -1078,28 +1090,38 @@ model PaymentWebhookEvent {
 }
 
 model Refund {
-  id                String       @id @default(uuid()) @db.Uuid
-  paymentId         String       @map("payment_id") @db.Uuid
-  appointmentId     String       @map("appointment_id") @db.Uuid
-  requestedByUserId String       @map("requested_by_user_id") @db.Uuid
-  reviewedByUserId  String?      @map("reviewed_by_user_id") @db.Uuid
-  provider          String       @db.VarChar(80)
-  providerRefundId  String?      @map("provider_refund_id") @db.VarChar(160)
-  amountMinor       BigInt       @map("amount_minor")
-  currency          String       @default("LKR") @db.VarChar(3)
-  status            RefundStatus @default(REQUESTED)
-  reason            String
-  adminNotes        String?      @map("admin_notes")
-  requestedAt       DateTime     @default(now()) @map("requested_at") @db.Timestamptz(6)
-  reviewedAt        DateTime?    @map("reviewed_at") @db.Timestamptz(6)
-  processedAt       DateTime?    @map("processed_at") @db.Timestamptz(6)
-  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                             String       @id @default(uuid()) @db.Uuid
+  paymentId                      String       @map("payment_id") @db.Uuid
+  appointmentId                  String       @map("appointment_id") @db.Uuid
+  requestedByUserId              String       @map("requested_by_user_id") @db.Uuid
+  reviewedByUserId               String?      @map("reviewed_by_user_id") @db.Uuid
+  provider                       String       @db.VarChar(80)
+  providerRefundId               String?      @map("provider_refund_id") @db.VarChar(160)
+  providerStatus                 String?      @map("provider_status") @db.VarChar(120)
+  providerResponse               Json?        @map("provider_response")
+  amountMinor                    BigInt       @map("amount_minor")
+  currency                       String       @default("LKR") @db.VarChar(3)
+  status                         RefundStatus @default(REQUESTED)
+  reason                         String
+  adminNotes                     String?      @map("admin_notes")
+  retryCount                     Int          @default(0) @map("retry_count")
+  reconciliationReason           String?      @map("reconciliation_reason")
+  reconciliationNotes            String?      @map("reconciliation_notes")
+  reconciliationAssignedToUserId String?      @map("reconciliation_assigned_to_user_id") @db.Uuid
+  lastVerificationAt             DateTime?    @map("last_verification_at") @db.Timestamptz(6)
+  resolvedAt                     DateTime?    @map("resolved_at") @db.Timestamptz(6)
+  resolutionAction               String?      @map("resolution_action") @db.VarChar(80)
+  requestedAt                    DateTime     @default(now()) @map("requested_at") @db.Timestamptz(6)
+  reviewedAt                     DateTime?    @map("reviewed_at") @db.Timestamptz(6)
+  processedAt                    DateTime?    @map("processed_at") @db.Timestamptz(6)
+  createdAt                      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
-  payment     Payment     @relation(fields: [paymentId], references: [id], onDelete: Restrict)
-  requestedBy User        @relation("RefundRequestedBy", fields: [requestedByUserId], references: [id], onDelete: Restrict)
-  reviewedBy  User?       @relation("RefundReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  appointment              Appointment @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  payment                  Payment     @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  requestedBy              User        @relation("RefundRequestedBy", fields: [requestedByUserId], references: [id], onDelete: Restrict)
+  reviewedBy               User?       @relation("RefundReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  reconciliationAssignedTo User?       @relation("RefundReconciliationAssignedTo", fields: [reconciliationAssignedToUserId], references: [id], onDelete: SetNull)
 
   statusHistory RefundStatusHistory[]
 
@@ -1204,24 +1226,27 @@ model NotificationTemplate {
 }
 
 model NotificationLog {
-  id                String              @id @default(uuid()) @db.Uuid
-  userId            String?             @map("user_id") @db.Uuid
-  appointmentId     String?             @map("appointment_id") @db.Uuid
-  channel           NotificationChannel
-  eventCode         String              @map("event_code") @db.VarChar(120)
-  idempotencyKey    String?             @unique @map("idempotency_key") @db.VarChar(160)
-  recipient         String
-  subject           String?
-  body              String?
-  status            NotificationStatus  @default(QUEUED)
-  provider          String?             @db.VarChar(80)
-  providerMessageId String?             @map("provider_message_id") @db.VarChar(160)
-  error             String?
-  attempts          Int                 @default(0)
-  scheduledAt       DateTime?           @map("scheduled_at") @db.Timestamptz(6)
-  sentAt            DateTime?           @map("sent_at") @db.Timestamptz(6)
-  createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                    String              @id @default(uuid()) @db.Uuid
+  userId                String?             @map("user_id") @db.Uuid
+  appointmentId         String?             @map("appointment_id") @db.Uuid
+  channel               NotificationChannel
+  eventCode             String              @map("event_code") @db.VarChar(120)
+  idempotencyKey        String?             @unique @map("idempotency_key") @db.VarChar(160)
+  recipient             String
+  subject               String?
+  body                  String?
+  status                NotificationStatus  @default(QUEUED)
+  provider              String?             @db.VarChar(80)
+  providerMessageId     String?             @map("provider_message_id") @db.VarChar(160)
+  providerStatus        String?             @map("provider_status") @db.VarChar(120)
+  providerResponse      Json?               @map("provider_response")
+  failureClassification String?             @map("failure_classification") @db.VarChar(40)
+  error                 String?
+  attempts              Int                 @default(0)
+  scheduledAt           DateTime?           @map("scheduled_at") @db.Timestamptz(6)
+  sentAt                DateTime?           @map("sent_at") @db.Timestamptz(6)
+  createdAt             DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
   user        User?        @relation(fields: [userId], references: [id], onDelete: SetNull)

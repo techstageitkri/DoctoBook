@@ -9,6 +9,7 @@ import { AuditService } from "../audit/audit.service.js";
 import { AuthenticatedUser, RequestContext } from "../auth/auth.types.js";
 import { AuthorizationService } from "../authorization/authorization.service.js";
 import { PrismaService } from "../database/prisma.service.js";
+import { SlotQueueService } from "../slots/slot-queue.service.js";
 import {
   AssignClinicAdminInput,
   CreateClinicInput,
@@ -26,7 +27,8 @@ export class ClinicService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly authorizationService: AuthorizationService,
-    private readonly auditService: AuditService
+    private readonly auditService: AuditService,
+    private readonly slotQueueService: SlotQueueService
   ) {}
 
   async createClinic(actor: AuthenticatedUser, input: CreateClinicInput, context: RequestContext) {
@@ -191,6 +193,8 @@ export class ClinicService {
       metadata: { status: input.status, reason: input.reason ?? null }
     });
 
+    await this.slotQueueService.enqueueClinic(clinic.id, { reason: "doctor_clinic_changed" });
+
     return clinic;
   }
 
@@ -217,6 +221,8 @@ export class ClinicService {
       ipAddress: context.ipAddress,
       userAgent: context.userAgent
     });
+
+    await this.slotQueueService.enqueueClinic(clinic.id, { reason: "doctor_clinic_changed" });
 
     return clinic;
   }
@@ -262,6 +268,8 @@ export class ClinicService {
       userAgent: context.userAgent,
       afterData: this.toJson(location)
     });
+
+    await this.slotQueueService.enqueueLocation(location.id, { reason: "clinic_hours_changed" });
 
     return location;
   }
@@ -350,6 +358,8 @@ export class ClinicService {
       userAgent: context.userAgent
     });
 
+    await this.slotQueueService.enqueueLocation(location.id, { reason: "clinic_hours_changed" });
+
     return location;
   }
 
@@ -399,6 +409,8 @@ export class ClinicService {
       metadata: { count: hours.length }
     });
 
+    await this.slotQueueService.enqueueLocation(locationId, { reason: "clinic_hours_changed" });
+
     return { hours };
   }
 
@@ -434,6 +446,8 @@ export class ClinicService {
       afterData: this.toJson(closure)
     });
 
+    await this.slotQueueService.enqueueLocation(locationId, { reason: "clinic_closure_changed" });
+
     return closure;
   }
 
@@ -468,6 +482,8 @@ export class ClinicService {
       ipAddress: context.ipAddress,
       userAgent: context.userAgent
     });
+
+    await this.slotQueueService.enqueueLocation(locationId, { reason: "clinic_closure_changed" });
 
     return { deleted: true };
   }

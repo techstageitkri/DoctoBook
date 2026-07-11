@@ -1,9 +1,9 @@
 import { APP_NAME } from "@doctobook/shared";
-import { ClinicAdminPortal } from "./clinic-admin-portal";
+import { PatientBookingPortal } from "./patient-booking-portal";
 
 export default function HomePage() {
   return (
-    <ClinicAdminPortal
+    <PatientBookingPortal
       apiUrl={process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000"}
       appName={APP_NAME}
     />

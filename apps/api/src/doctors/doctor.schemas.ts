@@ -13,7 +13,7 @@ const passwordSchema = z.string().min(8).max(256);
 const nullableTextSchema = z.string().trim().min(1).optional().nullable();
 const languageSchema = z.string().trim().min(2).max(40);
 
-export const registerDoctorSchema = z.object({
+export const registerDoctorSchema = z.strictObject({
   email: emailSchema,
   phone: phoneSchema.optional(),
   fullName: z.string().trim().min(2).max(160),
@@ -26,7 +26,7 @@ export const registerDoctorSchema = z.object({
   specialtyIds: z.array(uuidSchema).max(12).default([])
 });
 
-export const updateDoctorProfileSchema = z.object({
+export const updateDoctorProfileSchema = z.strictObject({
   licenseNumber: z.string().trim().min(2).max(120).optional().nullable(),
   qualifications: nullableTextSchema,
   bio: nullableTextSchema,
@@ -35,7 +35,7 @@ export const updateDoctorProfileSchema = z.object({
   specialtyIds: z.array(uuidSchema).max(12).optional()
 });
 
-export const createDoctorDocumentSchema = z.object({
+export const createDoctorDocumentSchema = z.strictObject({
   documentType: z.string().trim().min(2).max(80),
   storageProvider: z.string().trim().min(2).max(80).default("local"),
   bucket: z.string().trim().min(1).max(160).optional().nullable(),
@@ -46,20 +46,20 @@ export const createDoctorDocumentSchema = z.object({
   checksum: z.string().trim().min(1).max(160).optional().nullable()
 });
 
-export const listDoctorsQuerySchema = z.object({
+export const listDoctorsQuerySchema = z.strictObject({
   status: z.nativeEnum(DoctorStatus).optional(),
   search: z.string().trim().min(1).max(120).optional()
 });
 
-export const rejectDoctorSchema = z.object({
+export const rejectDoctorSchema = z.strictObject({
   reason: z.string().trim().min(1).max(1000)
 });
 
-export const doctorStatusReasonSchema = z.object({
+export const doctorStatusReasonSchema = z.strictObject({
   reason: z.string().trim().min(1).max(1000).optional()
 });
 
-export const requestClinicAssociationSchema = z.object({
+export const requestClinicAssociationSchema = z.strictObject({
   clinicId: uuidSchema,
   clinicLocationId: uuidSchema,
   defaultConsultationFeeMinor: z.number().int().nonnegative().optional().nullable(),
@@ -69,12 +69,12 @@ export const requestClinicAssociationSchema = z.object({
   bufferMinutes: z.number().int().min(0).max(240).default(0)
 });
 
-export const associationDecisionSchema = z.object({
+export const associationDecisionSchema = z.strictObject({
   reason: z.string().trim().min(1).max(1000).optional()
 });
 
 export const inviteDoctorSchema = z
-  .object({
+  .strictObject({
     email: emailSchema.optional(),
     phone: phoneSchema.optional(),
     clinicLocationId: uuidSchema.optional()
@@ -83,12 +83,12 @@ export const inviteDoctorSchema = z
     message: "Email or phone is required"
   });
 
-export const clinicDocumentReviewSchema = z.object({
+export const clinicDocumentReviewSchema = z.strictObject({
   status: z.enum([DocumentReviewStatus.APPROVED, DocumentReviewStatus.REJECTED]),
   reason: z.string().trim().min(1).max(1000).optional()
 });
 
-export const listDoctorAssociationsQuerySchema = z.object({
+export const listDoctorAssociationsQuerySchema = z.strictObject({
   status: z.nativeEnum(ClinicAssociationStatus).optional()
 });
 

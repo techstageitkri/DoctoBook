@@ -10,7 +10,7 @@ const timeSchema = z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/);
 
 export const clinicStatusSchema = z.nativeEnum(ClinicStatus);
 
-export const createClinicSchema = z.object({
+export const createClinicSchema = z.strictObject({
   name: z.string().trim().min(2).max(180),
   slug: z
     .string()
@@ -31,18 +31,18 @@ export const updateClinicSchema = createClinicSchema.partial().omit({ slug: true
   slug: createClinicSchema.shape.slug.optional()
 });
 
-export const updateClinicStatusSchema = z.object({
+export const updateClinicStatusSchema = z.strictObject({
   status: clinicStatusSchema,
   reason: z.string().trim().min(1).max(500).optional()
 });
 
-export const listClinicsQuerySchema = z.object({
+export const listClinicsQuerySchema = z.strictObject({
   status: clinicStatusSchema.optional(),
   includeDeleted: z.coerce.boolean().default(false),
   search: z.string().trim().min(1).max(120).optional()
 });
 
-export const createClinicLocationSchema = z.object({
+export const createClinicLocationSchema = z.strictObject({
   name: z.string().trim().min(1).max(160).optional().nullable(),
   address: z.string().trim().min(3),
   city: z.string().trim().min(2).max(100),
@@ -59,10 +59,10 @@ export const createClinicLocationSchema = z.object({
 
 export const updateClinicLocationSchema = createClinicLocationSchema.partial();
 
-export const setLocationHoursSchema = z.object({
+export const setLocationHoursSchema = z.strictObject({
   hours: z
     .array(
-      z.object({
+      z.strictObject({
         dayOfWeek: z.number().int().min(0).max(6),
         opensAt: timeSchema.optional().nullable(),
         closesAt: timeSchema.optional().nullable(),
@@ -74,13 +74,13 @@ export const setLocationHoursSchema = z.object({
     .min(1)
 });
 
-export const createClosureSchema = z.object({
+export const createClosureSchema = z.strictObject({
   startsAt: z.string().datetime({ offset: true }),
   endsAt: z.string().datetime({ offset: true }),
   reason: z.string().trim().min(1).max(500).optional().nullable()
 });
 
-export const assignClinicAdminSchema = z.object({
+export const assignClinicAdminSchema = z.strictObject({
   userId: uuidSchema
 });
 

@@ -1,6 +1,6 @@
 import { randomBytes, scrypt as scryptCallback } from "node:crypto";
 import { promisify } from "node:util";
-import { PrismaClient, ScopeType, UserStatus } from "@prisma/client";
+import { NotificationChannel, PrismaClient, ScopeType, UserStatus } from "@prisma/client";
 
 const prisma = new PrismaClient();
 const scrypt = promisify(scryptCallback);
@@ -264,8 +264,150 @@ const platformSettings = [
   ["security.password_hash_algorithm", { value: "scrypt" }],
   ["notification.enabled_channels", { channels: ["email", "sms", "push"] }],
   ["notification.default_locale", { locale: "en" }],
+  ["notification.reminder_offsets_minutes", { offsets: [1440, 120] }],
   ["compliance.audit_retention_days", { value: 2555 }],
   ["compliance.privacy_mode", { value: "hipaa_grade" }]
+] as const;
+
+const notificationTemplates = [
+  [
+    "auth.email_verification",
+    NotificationChannel.EMAIL,
+    "Verify your DoctoBook email",
+    "Hello {{user.fullName}}, use this verification code to activate your account: {{verification.token}}"
+  ],
+  [
+    "password.reset",
+    NotificationChannel.EMAIL,
+    "Reset your DoctoBook password",
+    "Hello {{user.fullName}}, use this password reset code: {{passwordReset.token}}"
+  ],
+  [
+    "doctor.approved",
+    NotificationChannel.EMAIL,
+    "Doctor profile approved",
+    "Hello {{user.fullName}}, your doctor profile has been approved."
+  ],
+  [
+    "doctor.rejected",
+    NotificationChannel.EMAIL,
+    "Doctor profile needs updates",
+    "Hello {{user.fullName}}, your doctor profile was rejected. Reason: {{doctor.rejectionReason}}"
+  ],
+  [
+    "appointment.booked",
+    NotificationChannel.EMAIL,
+    "Appointment booked",
+    "Your {{appointment.serviceName}} appointment with Dr. {{doctor.name}} at {{clinic.name}} is booked for {{appointment.startsAt}}."
+  ],
+  [
+    "appointment.booked",
+    NotificationChannel.SMS,
+    null,
+    "DoctoBook: Appointment {{appointment.number}} booked for {{appointment.startsAt}}."
+  ],
+  [
+    "appointment.booked",
+    NotificationChannel.PUSH,
+    "Appointment booked",
+    "Appointment {{appointment.number}} is booked for {{appointment.startsAt}}."
+  ],
+  [
+    "payment.required",
+    NotificationChannel.EMAIL,
+    "Payment required",
+    "Payment of {{payment.amount}} is required to confirm appointment {{appointment.number}}."
+  ],
+  [
+    "payment.succeeded",
+    NotificationChannel.EMAIL,
+    "Payment successful",
+    "Payment for appointment {{appointment.number}} was successful."
+  ],
+  [
+    "payment.failed",
+    NotificationChannel.EMAIL,
+    "Payment failed",
+    "Payment for appointment {{appointment.number}} failed. Please try again if the appointment is still active."
+  ],
+  [
+    "payment.cancelled",
+    NotificationChannel.EMAIL,
+    "Payment cancelled",
+    "Payment for appointment {{appointment.number}} was cancelled."
+  ],
+  [
+    "appointment.cancelled",
+    NotificationChannel.EMAIL,
+    "Appointment cancelled",
+    "Appointment {{appointment.number}} with Dr. {{doctor.name}} at {{clinic.name}} has been cancelled."
+  ],
+  [
+    "appointment.reminder",
+    NotificationChannel.EMAIL,
+    "Upcoming appointment reminder",
+    "Reminder: appointment {{appointment.number}} with Dr. {{doctor.name}} at {{clinic.name}} starts at {{appointment.startsAt}}."
+  ],
+  [
+    "appointment.reminder",
+    NotificationChannel.SMS,
+    null,
+    "DoctoBook reminder: appointment {{appointment.number}} starts at {{appointment.startsAt}}."
+  ],
+  [
+    "reschedule.payment_required",
+    NotificationChannel.EMAIL,
+    "Additional payment required",
+    "Additional payment is required to complete your reschedule from {{reschedule.oldStartsAt}} to {{reschedule.newStartsAt}}."
+  ],
+  [
+    "reschedule.completed",
+    NotificationChannel.EMAIL,
+    "Appointment rescheduled",
+    "Appointment {{appointment.number}} has been rescheduled to {{appointment.startsAt}}."
+  ],
+  [
+    "reschedule.cancelled",
+    NotificationChannel.EMAIL,
+    "Reschedule cancelled",
+    "Your pending reschedule request for appointment {{appointment.number}} was cancelled."
+  ],
+  [
+    "refund.requested",
+    NotificationChannel.EMAIL,
+    "Refund requested",
+    "A refund request was created for appointment {{appointment.number}}."
+  ],
+  [
+    "refund.completed",
+    NotificationChannel.EMAIL,
+    "Refund completed",
+    "Your refund for appointment {{appointment.number}} has been completed."
+  ],
+  [
+    "refund.failed",
+    NotificationChannel.EMAIL,
+    "Refund failed",
+    "Your refund for appointment {{appointment.number}} could not be completed and needs review."
+  ],
+  [
+    "review.invitation",
+    NotificationChannel.EMAIL,
+    "How was your appointment?",
+    "Your appointment {{appointment.number}} is complete. Please share your review for Dr. {{doctor.name}}."
+  ],
+  [
+    "review.submitted",
+    NotificationChannel.EMAIL,
+    "New patient review",
+    "A verified patient submitted a {{review.rating}} star review for appointment {{appointment.number}}."
+  ],
+  [
+    "review.moderated",
+    NotificationChannel.EMAIL,
+    "Review moderation update",
+    "Your review status is now {{review.status}}. Reason: {{review.moderationReason}}"
+  ]
 ] as const;
 
 const specialties = [
@@ -474,6 +616,49 @@ async function seedAppointmentServices() {
   }
 }
 
+async function upsertPlatformNotificationTemplate(
+  eventCode: string,
+  channel: NotificationChannel,
+  subject: string | null,
+  body: string
+) {
+  const result = await prisma.notificationTemplate.updateMany({
+    where: {
+      scopeType: ScopeType.PLATFORM,
+      scopeId: null,
+      eventCode,
+      channel,
+      locale: "en"
+    },
+    data: {
+      subject,
+      body,
+      isActive: true
+    }
+  });
+
+  if (result.count === 0) {
+    await prisma.notificationTemplate.create({
+      data: {
+        scopeType: ScopeType.PLATFORM,
+        scopeId: null,
+        eventCode,
+        channel,
+        locale: "en",
+        subject,
+        body,
+        isActive: true
+      }
+    });
+  }
+}
+
+async function seedNotificationTemplates() {
+  for (const [eventCode, channel, subject, body] of notificationTemplates) {
+    await upsertPlatformNotificationTemplate(eventCode, channel, subject, body);
+  }
+}
+
 async function seedOptionalSuperAdmin(seededRoles: Map<string, { id: string }>) {
   const email = process.env.SEED_SUPER_ADMIN_EMAIL?.trim().toLowerCase();
   const password = process.env.SEED_SUPER_ADMIN_PASSWORD;
@@ -544,6 +729,7 @@ async function main() {
   await seedPlatformSettings();
   await seedSpecialties();
   await seedAppointmentServices();
+  await seedNotificationTemplates();
   const createdSuperAdmin = await seedOptionalSuperAdmin(seededRoles);
 
   console.log(
@@ -553,6 +739,7 @@ async function main() {
       `${platformSettings.length} platform settings`,
       `${specialties.length} specialties`,
       `${appointmentServices.length} services`,
+      `${notificationTemplates.length} notification templates`,
       `super admin ${createdSuperAdmin ? "enabled" : "skipped"}`
     ].join(", ")
   );

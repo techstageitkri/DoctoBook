@@ -14,6 +14,7 @@ import { AuditService } from "../audit/audit.service.js";
 import { AuthenticatedUser, RequestContext } from "../auth/auth.types.js";
 import { AuthorizationService } from "../authorization/authorization.service.js";
 import { PrismaService } from "../database/prisma.service.js";
+import { SlotQueueService } from "../slots/slot-queue.service.js";
 import {
   CreateAvailabilityBreakInput,
   CreateAvailabilityRuleInput,
@@ -26,7 +27,8 @@ export class DoctorAvailabilityService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly authorizationService: AuthorizationService,
-    private readonly auditService: AuditService
+    private readonly auditService: AuditService,
+    private readonly slotQueueService: SlotQueueService
   ) {}
 
   async listMyAvailability(actor: AuthenticatedUser, associationId: string) {
@@ -270,6 +272,10 @@ export class DoctorAvailabilityService {
         afterData: this.toJson(availabilityRule)
       });
 
+      await this.slotQueueService.enqueueAssociation(association.id, {
+        reason: "availability_changed"
+      });
+
       return availabilityRule;
     } catch (error) {
       this.throwAvailabilityConstraint(error);
@@ -310,6 +316,10 @@ export class DoctorAvailabilityService {
         afterData: this.toJson(availabilityRule)
       });
 
+      await this.slotQueueService.enqueueAssociation(existingRule.doctorClinicId, {
+        reason: "availability_changed"
+      });
+
       return availabilityRule;
     } catch (error) {
       this.throwAvailabilityConstraint(error);
@@ -333,6 +343,10 @@ export class DoctorAvailabilityService {
       clinicId: rule.doctorClinic.clinicId,
       ipAddress: context.ipAddress,
       userAgent: context.userAgent
+    });
+
+    await this.slotQueueService.enqueueAssociation(rule.doctorClinicId, {
+      reason: "availability_changed"
     });
 
     return { deleted: true };
@@ -367,6 +381,10 @@ export class DoctorAvailabilityService {
       afterData: this.toJson(availabilityBreak)
     });
 
+    await this.slotQueueService.enqueueAssociation(rule.doctorClinicId, {
+      reason: "break_changed"
+    });
+
     return availabilityBreak;
   }
 
@@ -386,6 +404,10 @@ export class DoctorAvailabilityService {
       clinicId: availabilityBreak.rule.doctorClinic.clinicId,
       ipAddress: context.ipAddress,
       userAgent: context.userAgent
+    });
+
+    await this.slotQueueService.enqueueAssociation(availabilityBreak.rule.doctorClinicId, {
+      reason: "break_changed"
     });
 
     return { deleted: true };
@@ -445,6 +467,10 @@ export class DoctorAvailabilityService {
         afterData: this.toJson(timeOff)
       });
 
+      await this.slotQueueService.enqueueAssociation(association.id, {
+        reason: "time_off_changed"
+      });
+
       return timeOff;
     } catch (error) {
       this.throwTimeOffConstraint(error);
@@ -468,6 +494,10 @@ export class DoctorAvailabilityService {
       clinicId: timeOff.doctorClinic.clinicId,
       ipAddress: context.ipAddress,
       userAgent: context.userAgent
+    });
+
+    await this.slotQueueService.enqueueAssociation(timeOff.doctorClinicId, {
+      reason: "time_off_changed"
     });
 
     return { deleted: true };

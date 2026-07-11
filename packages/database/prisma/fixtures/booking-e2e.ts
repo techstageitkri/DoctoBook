@@ -224,6 +224,7 @@ async function createFixture() {
       paymentMode: PaymentMode.PAY_AT_CLINIC
     });
     const slotResult = await refreshSlots(tx, {
+      doctorId: doctor.id,
       doctorClinicId: doctorClinic.id,
       doctorClinicServiceId: doctorClinicService.id,
       slotPlan,
@@ -273,6 +274,7 @@ async function createFixture() {
       paymentMode: PaymentMode.ONLINE_REQUIRED
     });
     const onlineSlotResult = await refreshSlots(tx, {
+      doctorId: doctor.id,
       doctorClinicId: doctorClinic.id,
       doctorClinicServiceId: onlineDoctorClinicService.id,
       slotPlan: onlineSlotPlan,
@@ -744,6 +746,7 @@ async function replaceDoctorAvailability(tx: PrismaClientLike, doctorClinicId: s
 async function refreshSlots(
   tx: PrismaClientLike,
   input: {
+    doctorId: string;
     doctorClinicId: string;
     doctorClinicServiceId: string;
     slotPlan: FixtureSlot[];
@@ -830,12 +833,34 @@ async function refreshSlots(
       }
     }
   };
-  const availableSlotCount = await tx.appointmentSlot.count({ where: availableSlotWhere });
-  const firstAvailableSlot = await tx.appointmentSlot.findFirst({
+  const candidateSlots = await tx.appointmentSlot.findMany({
     where: availableSlotWhere,
     orderBy: { startsAt: "asc" },
-    select: { startsAt: true }
+    select: {
+      startsAt: true,
+      endsAt: true
+    }
   });
+  const availableSlots: typeof candidateSlots = [];
+
+  for (const slot of candidateSlots) {
+    const doctorOverlap = await tx.appointment.findFirst({
+      where: {
+        doctorId: input.doctorId,
+        status: { in: blockingAppointmentStatuses },
+        startsAt: { lt: slot.endsAt },
+        endsAt: { gt: slot.startsAt }
+      },
+      select: { id: true }
+    });
+
+    if (!doctorOverlap) {
+      availableSlots.push(slot);
+    }
+  }
+
+  const availableSlotCount = availableSlots.length;
+  const firstAvailableSlot = availableSlots[0] ?? null;
 
   if (availableSlotCount < 3 || !firstAvailableSlot) {
     throw new Error(`Expected at least 3 available fixture slots, found ${availableSlotCount}`);

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-API_URL="${API_URL:-http://127.0.0.1:4000}"
-WEB_URL="${WEB_URL:-http://127.0.0.1:3000}"
+API_URL="${API_URL:-http://127.0.0.1:4001}"
+WEB_URL="${WEB_URL:-http://127.0.0.1:3002}"
 PUBLIC_URL="${PUBLIC_URL:-}"
 RETRIES="${RETRIES:-20}"
 SLEEP_SECONDS="${SLEEP_SECONDS:-3}"

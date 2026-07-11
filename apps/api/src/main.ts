@@ -31,8 +31,8 @@ async function bootstrap() {
   });
   app.useGlobalFilters(new SafeHttpExceptionFilter(logger));
 
-  await app.listen(env.API_PORT);
-  logger.info("api.started", { port: env.API_PORT });
+  await app.listen(env.API_PORT, env.API_HOST);
+  logger.info("api.started", { host: env.API_HOST, port: env.API_PORT });
 }
 
 bootstrap().catch((error) => {

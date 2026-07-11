@@ -59,6 +59,7 @@ const baseServerEnvSchema = z.object({
   JWT_ACCESS_TOKEN_SECRET: z.string().min(16),
   JWT_REFRESH_TOKEN_SECRET: z.string().min(16),
   ENCRYPTION_KEY: z.string().min(16),
+  API_HOST: z.string().trim().min(1).default("127.0.0.1"),
   API_PORT: z.coerce.number().int().positive().default(4000),
   API_CORS_ORIGINS: z.string().optional(),
   API_TRUST_PROXY: booleanEnvSchema.default(false),
@@ -86,7 +87,7 @@ export const serverEnvSchema = baseServerEnvSchema
   });
 
 export const workerEnvSchema = baseServerEnvSchema
-  .omit({ API_PORT: true })
+  .omit({ API_HOST: true, API_PORT: true })
   .superRefine((value, context) => {
     addMissingProviderIssues(context, "EMAIL_PROVIDER", value.EMAIL_PROVIDER, {
       smtp: ["SMTP_HOST", ["EMAIL_FROM_EMAIL", "SMTP_FROM_EMAIL"]],

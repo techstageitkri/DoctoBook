@@ -1,8 +1,10 @@
 const path = require("node:path");
 
 const rootDir = path.resolve(__dirname, "../..");
-const webPort = process.env.WEB_PORT || "3000";
-const apiPort = process.env.API_PORT || "4000";
+const webHost = process.env.WEB_HOST || "127.0.0.1";
+const webPort = process.env.WEB_PORT || "3002";
+const apiHost = process.env.API_HOST || "127.0.0.1";
+const apiPort = process.env.API_PORT || "4001";
 const nodeEnv = "production";
 
 const common = {
@@ -25,7 +27,7 @@ module.exports = {
     {
       ...common,
       name: "doctobook-web",
-      args: `--filter @doctobook/web start -- -p ${webPort}`,
+      args: `--filter @doctobook/web start -- -H ${webHost} -p ${webPort}`,
       instances: 1,
       exec_mode: "fork",
       max_memory_restart: "768M",
@@ -34,6 +36,7 @@ module.exports = {
       env: {
         ...common.env,
         PORT: webPort,
+        WEB_HOST: webHost,
         WEB_PORT: webPort,
         NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || "https://doctobook.example.com"
       }
@@ -49,6 +52,7 @@ module.exports = {
       error_file: "./logs/doctobook-api.error.log",
       env: {
         ...common.env,
+        API_HOST: apiHost,
         API_PORT: apiPort,
         API_TRUST_PROXY: process.env.API_TRUST_PROXY || "true",
         API_BODY_LIMIT: process.env.API_BODY_LIMIT || "1mb",

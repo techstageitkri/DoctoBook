@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { AppController } from "./app.controller.js";
+import { AvailabilityModule } from "./availability/availability.module.js";
 import { AuthModule } from "./auth/auth.module.js";
 import { AuthorizationModule } from "./authorization/authorization.module.js";
 import { ClinicModule } from "./clinics/clinic.module.js";
@@ -14,6 +15,7 @@ import { ServiceConfigModule } from "./services/service.module.js";
     AuthorizationModule,
     ClinicModule,
     DoctorModule,
+    AvailabilityModule,
     ServiceConfigModule
   ],
   controllers: [AppController]

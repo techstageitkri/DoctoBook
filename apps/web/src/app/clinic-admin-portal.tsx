@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { DoctorAvailabilityPanel } from "./doctor-availability-panel";
 import { DoctorOnboardingPanel } from "./doctor-onboarding-panel";
 import { ServiceConfigurationPanel } from "./service-configuration-panel";
 
@@ -485,6 +486,9 @@ export function ClinicAdminPortal({ apiUrl, appName }: { apiUrl: string; appName
           </a>
           <a className="nav-item" href="#services">
             Services
+          </a>
+          <a className="nav-item" href="#availability">
+            Availability
           </a>
         </nav>
       </aside>
@@ -993,6 +997,11 @@ export function ClinicAdminPortal({ apiUrl, appName }: { apiUrl: string; appName
 
         <DoctorOnboardingPanel apiUrl={apiUrl} accessToken={accessToken} />
         <ServiceConfigurationPanel
+          apiUrl={apiUrl}
+          accessToken={accessToken}
+          selectedClinicId={selectedClinicId}
+        />
+        <DoctorAvailabilityPanel
           apiUrl={apiUrl}
           accessToken={accessToken}
           selectedClinicId={selectedClinicId}

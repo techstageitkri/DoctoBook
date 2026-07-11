@@ -27,7 +27,7 @@ module.exports = {
     {
       ...common,
       name: "doctobook-web",
-      args: `--filter @doctobook/web start -- -H ${webHost} -p ${webPort}`,
+      args: `--filter @doctobook/web exec next start -H ${webHost} -p ${webPort}`,
       instances: 1,
       exec_mode: "fork",
       max_memory_restart: "768M",

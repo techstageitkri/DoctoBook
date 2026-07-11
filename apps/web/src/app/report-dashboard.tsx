@@ -126,14 +126,18 @@ export function ReportDashboard({
   apiUrl,
   appName,
   mode,
-  clinicId
+  clinicId,
+  accessTokenOverride,
+  embedded = false
 }: {
   apiUrl: string;
   appName: string;
   mode: ReportMode;
   clinicId?: string;
+  accessTokenOverride?: string;
+  embedded?: boolean;
 }) {
-  const [accessToken, setAccessToken] = useState("");
+  const [accessToken, setAccessToken] = useState(accessTokenOverride ?? "");
   const [from, setFrom] = useState(defaultFrom);
   const [to, setTo] = useState(defaultTo);
   const [groupBy, setGroupBy] = useState<"day" | "week" | "month">("day");
@@ -158,18 +162,23 @@ export function ReportDashboard({
   }, [clinicId, mode]);
 
   useEffect(() => {
+    if (accessTokenOverride) {
+      setAccessToken(accessTokenOverride);
+      return;
+    }
+
     const storedToken = window.sessionStorage.getItem(tokenStorageKey);
 
     if (storedToken) {
       setAccessToken(storedToken);
     }
-  }, [tokenStorageKey]);
+  }, [accessTokenOverride, tokenStorageKey]);
 
   useEffect(() => {
-    if (accessToken) {
+    if (accessToken && !accessTokenOverride) {
       window.sessionStorage.setItem(tokenStorageKey, accessToken);
     }
-  }, [accessToken, tokenStorageKey]);
+  }, [accessToken, accessTokenOverride, tokenStorageKey]);
 
   async function apiRequest<T>(path: string) {
     if (!accessToken.trim()) {
@@ -248,8 +257,8 @@ export function ReportDashboard({
   const primaryCurrency = revenue[0]?.currency ?? "LKR";
 
   return (
-    <main className="portal-shell">
-      <aside className="portal-sidebar">
+    <main className={embedded ? "report-embedded" : "portal-shell"}>
+      {!embedded && <aside className="portal-sidebar">
         <div>
           <p className="eyebrow">Reports</p>
           <h1>{appName}</h1>
@@ -268,9 +277,9 @@ export function ReportDashboard({
             Details
           </a>
         </nav>
-      </aside>
+      </aside>}
 
-      <section className="portal-main" id="overview">
+      <section className={embedded ? "report-content" : "portal-main"} id="overview">
         <header className="topbar">
           <div>
             <p className="eyebrow">{mode === "clinic" ? clinicId : mode}</p>
@@ -286,8 +295,8 @@ export function ReportDashboard({
           </button>
         </header>
 
-        <form className="auth-strip reports-filter" onSubmit={(event) => void loadReports(event)}>
-          <label>
+        <form className={`reports-filter${embedded ? " panel" : " auth-strip"}`} onSubmit={(event) => void loadReports(event)}>
+          {!embedded && <label>
             Access token
             <input
               autoComplete="off"
@@ -295,7 +304,7 @@ export function ReportDashboard({
               type="password"
               value={accessToken}
             />
-          </label>
+          </label>}
           <label>
             From
             <input onChange={(event) => setFrom(event.target.value)} type="date" value={from} />

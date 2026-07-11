@@ -59,6 +59,70 @@ button:disabled {
   padding: 28px 20px;
 }
 
+.admin-account {
+  display: grid;
+  gap: 5px;
+  border-top: 1px solid #d7ddd9;
+  padding-top: 18px;
+}
+
+.admin-account strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-account span {
+  overflow: hidden;
+  color: #68736d;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-account button {
+  margin-top: 8px;
+}
+
+.admin-auth-screen {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  background: #eef2f0;
+  padding: 24px;
+}
+
+.admin-login-panel {
+  display: grid;
+  width: min(100%, 420px);
+  gap: 18px;
+  border: 1px solid #d7ddd9;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 18px 50px rgba(24, 32, 28, 0.1);
+  padding: 28px;
+}
+
+.admin-login-panel h1 {
+  margin: 0;
+  color: #17221d;
+  font-size: 30px;
+  letter-spacing: 0;
+}
+
+.admin-login-panel p:not(.eyebrow) {
+  margin: 8px 0 0;
+  color: #68736d;
+  line-height: 1.5;
+}
+
+.admin-back-link {
+  color: #0b735e;
+  font-size: 13px;
+  font-weight: 800;
+  text-align: center;
+}
+
 .portal-sidebar h1,
 .topbar h2,
 .panel h3,
@@ -104,6 +168,55 @@ button:disabled {
   display: grid;
   gap: 18px;
   padding: 28px;
+}
+
+.admin-page-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+  border-bottom: 1px solid #d7ddd9;
+  padding: 2px 0 20px;
+}
+
+.admin-page-header h2 {
+  margin: 0;
+  color: #17221d;
+  font-size: 28px;
+  letter-spacing: 0;
+}
+
+.admin-page-header p:not(.eyebrow),
+.page-description {
+  max-width: 680px;
+  margin: 7px 0 0;
+  color: #68736d;
+  line-height: 1.45;
+}
+
+.admin-clinic-context {
+  display: grid;
+  width: min(100%, 320px);
+  gap: 7px;
+  color: #4b5751;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.report-embedded,
+.report-content {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+
+.report-embedded {
+  background: transparent;
+}
+
+.report-content .reports-filter {
+  grid-template-columns: repeat(4, minmax(150px, 1fr)) auto;
+  padding: 16px;
 }
 
 .availability-workspace,
@@ -1142,6 +1255,21 @@ textarea:focus {
     gap: 18px;
   }
 
+  .admin-account {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+
+  .admin-account span {
+    grid-column: 1;
+  }
+
+  .admin-account button {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    margin: 0;
+  }
+
   .portal-sidebar nav,
   .patient-sidebar nav {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1160,6 +1288,10 @@ textarea:focus {
   .refund-filter-grid {
     grid-template-columns: 1fr;
   }
+
+  .report-content .reports-filter {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 760px) {
@@ -1176,6 +1308,20 @@ textarea:focus {
   .detail-summary {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .admin-page-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .admin-clinic-context,
+  .report-content .reports-filter {
+    width: 100%;
+  }
+
+  .report-content .reports-filter {
+    grid-template-columns: 1fr;
   }
 
   .auth-strip,

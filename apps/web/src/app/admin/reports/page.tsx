@@ -1,12 +1,5 @@
-import { APP_NAME } from "@doctobook/shared";
-import { ReportDashboard } from "../../report-dashboard";
+import { AdminReportsView } from "../admin-reports-view";
 
 export default function AdminReportsPage() {
-  return (
-    <ReportDashboard
-      apiUrl={process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000"}
-      appName={APP_NAME}
-      mode="admin"
-    />
-  );
+  return <AdminReportsView />;
 }

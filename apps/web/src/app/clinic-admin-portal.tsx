@@ -1,12 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { AppointmentOperationsPanel } from "./appointment-operations-panel";
-import { DoctorAvailabilityPanel } from "./doctor-availability-panel";
-import { DoctorOnboardingPanel } from "./doctor-onboarding-panel";
-import { RefundRecoveryPanel } from "./refund-recovery-panel";
-import { ReviewModerationPanel } from "./review-moderation-panel";
-import { ServiceConfigurationPanel } from "./service-configuration-panel";
+import { useAdminSession } from "./admin/admin-shell";
 
 type ClinicStatus = "DRAFT" | "PENDING_APPROVAL" | "ACTIVE" | "SUSPENDED" | "CLOSED";
 type PaymentMode = "ONLINE_REQUIRED" | "PAY_AT_CLINIC" | "ONLINE_OPTIONAL";
@@ -147,8 +142,8 @@ const defaultClosureForm: ClosureForm = {
   reason: ""
 };
 
-export function ClinicAdminPortal({ apiUrl, appName }: { apiUrl: string; appName: string }) {
-  const [accessToken, setAccessToken] = useState("");
+export function ClinicAdminPortal({ apiUrl }: { apiUrl: string }) {
+  const { accessToken } = useAdminSession();
   const [clinics, setClinics] = useState<Clinic[]>([]);
   const [selectedClinicId, setSelectedClinicId] = useState("");
   const [selectedLocationId, setSelectedLocationId] = useState("");
@@ -180,17 +175,7 @@ export function ClinicAdminPortal({ apiUrl, appName }: { apiUrl: string; appName
   }, [clinics]);
 
   useEffect(() => {
-    const storedToken = window.sessionStorage.getItem("doctobook_access_token");
-
-    if (storedToken) {
-      setAccessToken(storedToken);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (accessToken) {
-      window.sessionStorage.setItem("doctobook_access_token", accessToken);
-    }
+    void refreshClinics();
   }, [accessToken]);
 
   async function apiRequest<T>(path: string, options: RequestInit = {}) {
@@ -468,48 +453,12 @@ export function ClinicAdminPortal({ apiUrl, appName }: { apiUrl: string; appName
   }
 
   return (
-    <main className="portal-shell">
-      <aside className="portal-sidebar">
-        <div>
-          <p className="eyebrow">Marketplace admin</p>
-          <h1>{appName}</h1>
-        </div>
-        <nav aria-label="Admin navigation">
-          <a className="nav-item active" href="#clinics">
-            Clinics
-          </a>
-          <a className="nav-item" href="#locations">
-            Locations
-          </a>
-          <a className="nav-item" href="#access">
-            Access
-          </a>
-          <a className="nav-item" href="#doctors">
-            Doctors
-          </a>
-          <a className="nav-item" href="#services">
-            Services
-          </a>
-          <a className="nav-item" href="#availability">
-            Availability
-          </a>
-          <a className="nav-item" href="#appointments">
-            Appointments
-          </a>
-          <a className="nav-item" href="#reviews">
-            Reviews
-          </a>
-          <a className="nav-item" href="#refunds">
-            Refunds
-          </a>
-        </nav>
-      </aside>
-
-      <section className="portal-main" id="clinics">
+    <>
         <header className="topbar">
           <div>
             <p className="eyebrow">Super Admin</p>
             <h2>Clinic management</h2>
+            <p className="page-description">Manage organizations, locations, operating hours, closures, and administrators.</p>
           </div>
           <button
             className="primary-button"
@@ -520,22 +469,6 @@ export function ClinicAdminPortal({ apiUrl, appName }: { apiUrl: string; appName
             Refresh
           </button>
         </header>
-
-        <section className="auth-strip" id="access" aria-label="API access">
-          <label>
-            API URL
-            <input readOnly value={apiUrl} />
-          </label>
-          <label>
-            Access token
-            <input
-              autoComplete="off"
-              onChange={(event) => setAccessToken(event.target.value)}
-              type="password"
-              value={accessToken}
-            />
-          </label>
-        </section>
 
         {(notice || error) && (
           <div className={error ? "status-message error" : "status-message"} role="status">
@@ -1007,26 +940,7 @@ export function ClinicAdminPortal({ apiUrl, appName }: { apiUrl: string; appName
           </div>
         </section>
 
-        <DoctorOnboardingPanel apiUrl={apiUrl} accessToken={accessToken} />
-        <ServiceConfigurationPanel
-          apiUrl={apiUrl}
-          accessToken={accessToken}
-          selectedClinicId={selectedClinicId}
-        />
-        <DoctorAvailabilityPanel
-          apiUrl={apiUrl}
-          accessToken={accessToken}
-          selectedClinicId={selectedClinicId}
-        />
-        <AppointmentOperationsPanel
-          apiUrl={apiUrl}
-          accessToken={accessToken}
-          selectedClinicId={selectedClinicId}
-        />
-        <ReviewModerationPanel apiUrl={apiUrl} accessToken={accessToken} />
-        <RefundRecoveryPanel apiUrl={apiUrl} accessToken={accessToken} />
-      </section>
-    </main>
+    </>
   );
 }
 

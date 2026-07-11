@@ -1,5 +1,4 @@
-import { APP_NAME } from "@doctobook/shared";
-import { ReportDashboard } from "../../../../report-dashboard";
+import { AdminReportsView } from "../../../admin-reports-view";
 
 export default async function ClinicReportsPage({
   params
@@ -8,12 +7,5 @@ export default async function ClinicReportsPage({
 }) {
   const { clinicId } = await params;
 
-  return (
-    <ReportDashboard
-      apiUrl={process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000"}
-      appName={APP_NAME}
-      clinicId={clinicId}
-      mode="clinic"
-    />
-  );
+  return <AdminReportsView clinicId={clinicId} />;
 }

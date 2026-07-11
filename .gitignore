@@ -8,6 +8,10 @@ test-results
 .env
 .env.local
 .env.*.local
+
+# Private project master documentation and credentials
+docs/private/
+
 *.log
 *.tsbuildinfo
 .DS_Store

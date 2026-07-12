@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { getNotificationProviderHealth, renderNotificationTemplate } from "./index.js";
+import {
+  decryptNotificationDelivery,
+  encryptNotificationDelivery,
+  getNotificationProviderHealth,
+  renderNotificationTemplate
+} from "./index.js";
 
 describe("notification template rendering", () => {
   it("replaces nested placeholders and leaves missing values empty", () => {
@@ -12,6 +17,23 @@ describe("notification template rendering", () => {
         }
       )
     ).toBe("Hello Amina Patient, appointment APT-1001 ");
+  });
+});
+
+describe("sensitive notification delivery encryption", () => {
+  it("encrypts rendered delivery bodies before queue persistence", () => {
+    const delivery = {
+      subject: "Verify",
+      body: "https://doctobook.test/verify-email#token=secret-token",
+      sensitive: true
+    };
+    const encrypted = encryptNotificationDelivery(delivery, "test-encryption-key", "log-id");
+
+    expect(encrypted.ciphertext).not.toContain("secret-token");
+    expect(JSON.stringify(encrypted)).not.toContain("secret-token");
+    expect(decryptNotificationDelivery(encrypted, "test-encryption-key", "log-id")).toEqual(
+      delivery
+    );
   });
 });
 

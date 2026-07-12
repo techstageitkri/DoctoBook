@@ -122,6 +122,16 @@ type AuthSession = {
   };
 };
 
+class ApiRequestError extends Error {
+  constructor(
+    message: string,
+    readonly code?: string
+  ) {
+    super(message);
+    this.name = "ApiRequestError";
+  }
+}
+
 type PatientProfile = {
   id: string;
   userId: string;
@@ -403,6 +413,7 @@ export function PatientBookingPortal({
     email: "",
     password: ""
   });
+  const [pendingVerificationEmail, setPendingVerificationEmail] = useState("");
   const [booking, setBooking] = useState<BookingResponse | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatusResponse | null>(null);
   const [appointments, setAppointments] = useState<PatientAppointment[]>([]);
@@ -937,9 +948,7 @@ export function PatientBookingPortal({
 
     await runAction(async () => {
       if (authMode === "register") {
-        const registerResponse = await publicRequest<{
-          verificationToken?: string;
-        }>("/v1/auth/register", {
+        await publicRequest("/v1/auth/register", {
           method: "POST",
           body: JSON.stringify({
             accountType: "patient",
@@ -949,28 +958,54 @@ export function PatientBookingPortal({
             deviceName: "DoctoBook web"
           })
         });
-
-        if (registerResponse.verificationToken) {
-          await publicRequest("/v1/auth/email-verification/confirm", {
-            method: "POST",
-            body: JSON.stringify({ token: registerResponse.verificationToken })
-          });
-        }
+        setPendingVerificationEmail(authForm.email);
+        setNotice("Account created. Check your email to verify your account before signing in.");
+        return null;
       }
 
-      const loginResponse = await publicRequest<AuthSession>("/v1/auth/login", {
-        method: "POST",
-        body: JSON.stringify({
-          email: authForm.email,
-          password: authForm.password,
-          deviceName: "DoctoBook web"
-        })
-      });
+      let loginResponse: AuthSession;
+
+      try {
+        loginResponse = await publicRequest<AuthSession>("/v1/auth/login", {
+          method: "POST",
+          body: JSON.stringify({
+            email: authForm.email,
+            password: authForm.password,
+            deviceName: "DoctoBook web"
+          })
+        });
+      } catch (loginError) {
+        if (loginError instanceof ApiRequestError && loginError.code === "EMAIL_VERIFICATION_REQUIRED") {
+          setPendingVerificationEmail(authForm.email);
+          setNotice("Email verification is required before sign-in. Check your email or resend the verification link.");
+          return null;
+        }
+
+        throw loginError;
+      }
+
       setSession(loginResponse);
       await loadPatientProfile(loginResponse.accessToken);
       await loadAppointments(loginResponse.accessToken, false);
       setNotice("Signed in");
-    }, authMode === "register" ? "Account created" : "Signed in");
+    }, authMode === "register" ? "" : "Signed in");
+  }
+
+  async function resendVerification(email = pendingVerificationEmail || authForm.email) {
+    const normalizedEmail = email.trim();
+
+    if (!normalizedEmail) {
+      setError("Enter your email address to resend verification.");
+      return;
+    }
+
+    await runAction(async () => {
+      await publicRequest("/v1/auth/email-verification/request", {
+        method: "POST",
+        body: JSON.stringify({ email: normalizedEmail })
+      });
+      setPendingVerificationEmail(normalizedEmail);
+    }, "If this account is pending verification, a new verification email has been sent.");
   }
 
   async function submitBooking() {
@@ -1118,7 +1153,7 @@ export function PatientBookingPortal({
               ? payload.error
               : `Request failed with ${response.status}`;
 
-      throw new Error(message);
+      throw new ApiRequestError(message, typeof payload?.code === "string" ? payload.code : undefined);
     }
 
     return (await response.json()) as T;
@@ -1296,10 +1331,12 @@ export function PatientBookingPortal({
               authForm={authForm}
               authMode={authMode}
               isLoading={isLoading}
+              pendingVerificationEmail={pendingVerificationEmail}
               patient={patient}
               session={session}
               setAuthForm={setAuthForm}
               setAuthMode={setAuthMode}
+              onResendVerification={resendVerification}
               onSubmitAuth={submitAuth}
             />
           ) : null}
@@ -1462,6 +1499,8 @@ function PatientDashboard({
   authForm,
   setAuthForm,
   isLoading,
+  pendingVerificationEmail,
+  onResendVerification,
   onSubmitAuth
 }: {
   patient: PatientProfile | null;
@@ -1472,6 +1511,8 @@ function PatientDashboard({
   authForm: { fullName: string; email: string; password: string };
   setAuthForm: (value: { fullName: string; email: string; password: string }) => void;
   isLoading: boolean;
+  pendingVerificationEmail: string;
+  onResendVerification: () => void;
   onSubmitAuth: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   const now = Date.now();
@@ -1496,7 +1537,7 @@ function PatientDashboard({
           </div>
           <Link className="primary-button" href="/patient/find-care">Explore available doctors<ChevronRight size={16} /></Link>
         </section>
-        <PatientAuthCard authForm={authForm} authMode={authMode} isLoading={isLoading} onSubmitAuth={onSubmitAuth} setAuthForm={setAuthForm} setAuthMode={setAuthMode} />
+        <PatientAuthCard authForm={authForm} authMode={authMode} isLoading={isLoading} onResendVerification={onResendVerification} onSubmitAuth={onSubmitAuth} pendingVerificationEmail={pendingVerificationEmail} setAuthForm={setAuthForm} setAuthMode={setAuthMode} />
       </div>
     );
   }
@@ -1522,8 +1563,58 @@ function PatientDashboard({
   );
 }
 
-function PatientAuthCard({ authMode, setAuthMode, authForm, setAuthForm, isLoading, onSubmitAuth }: { authMode: "login" | "register"; setAuthMode: (value: "login" | "register") => void; authForm: { fullName: string; email: string; password: string }; setAuthForm: (value: { fullName: string; email: string; password: string }) => void; isLoading: boolean; onSubmitAuth: (event: FormEvent<HTMLFormElement>) => void }) {
-  return <form className="patient-v2-card patient-v2-auth-card" onSubmit={onSubmitAuth}><div className="patient-v2-card-heading"><div><p>Secure access</p><h2>{authMode === "login" ? "Sign in to your account" : "Create your patient account"}</h2></div></div><div className="segmented"><button className={authMode === "login" ? "active" : ""} onClick={() => setAuthMode("login")} type="button">Sign in</button><button className={authMode === "register" ? "active" : ""} onClick={() => setAuthMode("register")} type="button">Register</button></div>{authMode === "register" ? <label>Full name<input autoComplete="name" onChange={(event) => setAuthForm({ ...authForm, fullName: event.target.value })} required value={authForm.fullName} /></label> : null}<label>Email address<input autoComplete="username" onChange={(event) => setAuthForm({ ...authForm, email: event.target.value })} required type="email" value={authForm.email} /></label><label>Password<input autoComplete={authMode === "login" ? "current-password" : "new-password"} minLength={8} onChange={(event) => setAuthForm({ ...authForm, password: event.target.value })} required type="password" value={authForm.password} /></label><button className="primary-button" disabled={isLoading} type="submit">{isLoading ? "Please wait…" : authMode === "login" ? "Sign in securely" : "Create account"}</button><small>DoctoBook uses a secure HttpOnly refresh cookie. Your authentication token is never stored in browser storage.</small></form>;
+function PatientAuthCard({
+  authMode,
+  setAuthMode,
+  authForm,
+  setAuthForm,
+  isLoading,
+  pendingVerificationEmail,
+  onResendVerification,
+  onSubmitAuth
+}: {
+  authMode: "login" | "register";
+  setAuthMode: (value: "login" | "register") => void;
+  authForm: { fullName: string; email: string; password: string };
+  setAuthForm: (value: { fullName: string; email: string; password: string }) => void;
+  isLoading: boolean;
+  pendingVerificationEmail: string;
+  onResendVerification: () => void;
+  onSubmitAuth: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <form className="patient-v2-card patient-v2-auth-card" onSubmit={onSubmitAuth}>
+      <div className="patient-v2-card-heading">
+        <div>
+          <p>Secure access</p>
+          <h2>{authMode === "login" ? "Sign in to your account" : "Create your patient account"}</h2>
+        </div>
+      </div>
+      <div className="segmented">
+        <button className={authMode === "login" ? "active" : ""} onClick={() => setAuthMode("login")} type="button">Sign in</button>
+        <button className={authMode === "register" ? "active" : ""} onClick={() => setAuthMode("register")} type="button">Register</button>
+      </div>
+      {pendingVerificationEmail ? (
+        <div className="patient-v2-check-email" role="status">
+          <ShieldCheck size={19} />
+          <div>
+            <strong>Check your email</strong>
+            <span>We sent a verification link to {pendingVerificationEmail}. Verify your account before signing in.</span>
+          </div>
+          <button disabled={isLoading} onClick={onResendVerification} type="button">
+            {isLoading ? "Sending..." : "Resend verification"}
+          </button>
+        </div>
+      ) : null}
+      {authMode === "register" ? (
+        <label>Full name<input autoComplete="name" onChange={(event) => setAuthForm({ ...authForm, fullName: event.target.value })} required value={authForm.fullName} /></label>
+      ) : null}
+      <label>Email address<input autoComplete="username" onChange={(event) => setAuthForm({ ...authForm, email: event.target.value })} required type="email" value={authForm.email} /></label>
+      <label>Password<input autoComplete={authMode === "login" ? "current-password" : "new-password"} minLength={8} onChange={(event) => setAuthForm({ ...authForm, password: event.target.value })} required type="password" value={authForm.password} /></label>
+      <button className="primary-button" disabled={isLoading} type="submit">{isLoading ? "Please wait..." : authMode === "login" ? "Sign in securely" : "Create account"}</button>
+      <small>DoctoBook uses a secure HttpOnly refresh cookie. Your authentication token is never stored in browser storage.</small>
+    </form>
+  );
 }
 
 function PatientPaymentsView({ appointments, session }: { appointments: PatientAppointment[]; session: AuthSession | null }) {

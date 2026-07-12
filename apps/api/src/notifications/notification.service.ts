@@ -1,6 +1,10 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { NotificationChannel, NotificationStatus, Prisma, ScopeType } from "@doctobook/database";
-import { createNotificationLogs, getNotificationProviderHealth } from "@doctobook/notifications";
+import {
+  createNotificationLogs,
+  createRecipientEmailNotificationLogs,
+  getNotificationProviderHealth
+} from "@doctobook/notifications";
 import { AuthenticatedUser, RequestContext } from "../auth/auth.types.js";
 import { PrismaService } from "../database/prisma.service.js";
 import { NotificationQueueService } from "./notification-queue.service.js";
@@ -127,14 +131,33 @@ export class NotificationService {
     appointmentId?: string | null;
     clinicId?: string | null;
     variables?: Record<string, unknown>;
+    sensitiveVariables?: Record<string, unknown>;
     channels?: NotificationChannel[];
     idempotencyKeySuffix?: string | null;
     scheduledAt?: Date | null;
   }) {
     const result = await createNotificationLogs(this.prisma, input);
 
-    for (const log of result.logs) {
-      await this.notificationQueue.enqueueDispatch(log.id);
+    for (const dispatch of result.dispatches) {
+      await this.notificationQueue.enqueueDispatch(dispatch.notificationLogId, dispatch.delivery);
+    }
+
+    return result;
+  }
+
+  async enqueueRecipientEmail(input: {
+    eventCode: string;
+    recipientEmail: string;
+    clinicId?: string | null;
+    variables?: Record<string, unknown>;
+    sensitiveVariables?: Record<string, unknown>;
+    idempotencyKeySuffix?: string | null;
+    scheduledAt?: Date | null;
+  }) {
+    const result = await createRecipientEmailNotificationLogs(this.prisma, input);
+
+    for (const dispatch of result.dispatches) {
+      await this.notificationQueue.enqueueDispatch(dispatch.notificationLogId, dispatch.delivery);
     }
 
     return result;

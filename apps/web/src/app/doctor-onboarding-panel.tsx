@@ -110,6 +110,7 @@ export function DoctorOnboardingPanel({
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
   const [doctorForm, setDoctorForm] = useState<DoctorRegistrationForm>(defaultDoctorForm);
   const [verificationToken, setVerificationToken] = useState("");
+  const [pendingDoctorVerificationEmail, setPendingDoctorVerificationEmail] = useState("");
   const [myProfile, setMyProfile] = useState<Doctor | null>(null);
   const [doctorList, setDoctorList] = useState<Doctor[]>([]);
   const [selectedDoctorId, setSelectedDoctorId] = useState("");
@@ -275,12 +276,35 @@ export function DoctorOnboardingPanel({
             specialtyIds: doctorForm.specialtyId ? [doctorForm.specialtyId] : []
           })
         }),
-      "Doctor registered"
+      "Doctor registered. Check your email to verify the account before signing in."
     );
+
+    if (registration) {
+      setPendingDoctorVerificationEmail(doctorForm.email);
+    }
 
     if (registration?.verificationToken) {
       setVerificationToken(registration.verificationToken);
     }
+  }
+
+  async function resendDoctorVerification() {
+    const email = pendingDoctorVerificationEmail || doctorForm.email;
+
+    if (!email.trim()) {
+      setError("Enter the doctor email address before resending verification.");
+      return;
+    }
+
+    await runAction(
+      () =>
+        publicRequest("/v1/auth/email-verification/request", {
+          method: "POST",
+          body: JSON.stringify({ email })
+        }),
+      "If this account is pending verification, a new verification email has been sent."
+    );
+    setPendingDoctorVerificationEmail(email);
   }
 
   async function handleVerifyAndLogin() {
@@ -585,6 +609,14 @@ export function DoctorOnboardingPanel({
           <div className="panel-header">
             <h3>Doctor session</h3>
           </div>
+          {pendingDoctorVerificationEmail ? (
+            <div className="status-message">
+              Verification email sent to {pendingDoctorVerificationEmail}. Use the link in the email or paste the fallback token below.
+              <button disabled={isLoading} onClick={resendDoctorVerification} type="button">
+                Resend verification
+              </button>
+            </div>
+          ) : null}
           <Field label="Verification token">
             <input
               onChange={(event) => setVerificationToken(event.target.value)}

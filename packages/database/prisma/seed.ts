@@ -274,13 +274,19 @@ const notificationTemplates = [
     "auth.email_verification",
     NotificationChannel.EMAIL,
     "Verify your DoctoBook email",
-    "Hello {{user.fullName}}, use this verification code to activate your account: {{verification.token}}"
+    "Hello {{user.fullName}}, verify your email by opening this link: {{verification.url}}\n\nThis link expires in {{verification.expiresInMinutes}} minutes. If the link does not open, copy and paste this manual token into the verification page: {{verification.token}}"
   ],
   [
     "password.reset",
     NotificationChannel.EMAIL,
     "Reset your DoctoBook password",
-    "Hello {{user.fullName}}, use this password reset code: {{passwordReset.token}}"
+    "Hello {{user.fullName}}, reset your DoctoBook password by opening this link: {{passwordReset.url}}\n\nThis link expires in {{passwordReset.expiresInMinutes}} minutes. If the link does not open, copy and paste this manual token into the password reset page: {{passwordReset.token}}"
+  ],
+  [
+    "doctor.invitation",
+    NotificationChannel.EMAIL,
+    "You are invited to join DoctoBook",
+    "You have been invited to join DoctoBook as a clinic doctor. Accept the invitation here: {{invitation.url}}\n\nThis invitation expires in {{invitation.expiresInDays}} days. If the link does not open, copy and paste this manual token into the invitation page: {{invitation.token}}"
   ],
   [
     "doctor.approved",

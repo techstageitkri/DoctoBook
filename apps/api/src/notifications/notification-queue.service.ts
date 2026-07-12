@@ -5,6 +5,8 @@ import {
   DispatchNotificationJob,
   NOTIFICATION_DISPATCH_JOB,
   NOTIFICATION_DISPATCH_QUEUE_NAME,
+  NotificationDeliveryOverride,
+  encryptNotificationDelivery,
   getNotificationDispatchJobId
 } from "@doctobook/notifications";
 
@@ -33,12 +35,26 @@ export class NotificationQueueService implements OnModuleDestroy {
     await this.queue.close();
   }
 
-  async enqueueDispatch(notificationLogId: string) {
+  async enqueueDispatch(notificationLogId: string, delivery?: NotificationDeliveryOverride) {
+    const isSensitive = delivery?.sensitive === true;
+    const payload: DispatchNotificationJob = {
+      notificationLogId,
+      ...(delivery
+        ? {
+            encryptedDelivery: encryptNotificationDelivery(
+              delivery,
+              this.deliveryEncryptionSecret(),
+              notificationLogId
+            )
+          }
+        : {})
+    };
     const job = await this.queue.add(
       NOTIFICATION_DISPATCH_JOB,
-      { notificationLogId },
+      payload,
       {
-        jobId: getNotificationDispatchJobId(notificationLogId)
+        jobId: getNotificationDispatchJobId(notificationLogId),
+        ...(isSensitive ? { removeOnComplete: true, removeOnFail: true } : {})
       }
     );
 
@@ -48,5 +64,15 @@ export class NotificationQueueService implements OnModuleDestroy {
       jobName: NOTIFICATION_DISPATCH_JOB,
       notificationLogId
     });
+  }
+
+  private deliveryEncryptionSecret() {
+    const secret = process.env.ENCRYPTION_KEY;
+
+    if (!secret) {
+      throw new Error("Missing ENCRYPTION_KEY for sensitive notification delivery");
+    }
+
+    return secret;
   }
 }

@@ -8,6 +8,7 @@ import {
   NOTIFICATION_DISPATCH_QUEUE_NAME,
   NOTIFICATION_SCHEDULE_REMINDERS_JOB,
   createNotificationLogs,
+  decryptNotificationDelivery,
   dispatchNotificationLog,
   getNotificationProviderHealth,
   getNotificationDispatchJobId
@@ -211,7 +212,15 @@ const notificationDispatchWorker = new Worker(
 
     const payload = job.data as DispatchNotificationJob;
 
-    return dispatchNotificationLog(prisma, payload.notificationLogId, process.env);
+    const delivery = payload.encryptedDelivery
+      ? decryptNotificationDelivery(
+          payload.encryptedDelivery,
+          deliveryEncryptionSecret(),
+          payload.notificationLogId
+        )
+      : undefined;
+
+    return dispatchNotificationLog(prisma, payload.notificationLogId, process.env, delivery);
   }),
   {
     connection,
@@ -232,6 +241,16 @@ const holdExpirationWorker = new Worker(
     concurrency: 1
   }
 );
+
+function deliveryEncryptionSecret() {
+  const secret = process.env.ENCRYPTION_KEY;
+
+  if (!secret) {
+    throw new Error("Missing ENCRYPTION_KEY for sensitive notification delivery");
+  }
+
+  return secret;
+}
 
 registerQueueEventLogging(SLOT_GENERATION_QUEUE_NAME, queueEvents);
 registerQueueEventLogging(PAYMENT_INITIATION_QUEUE_NAME, paymentInitiationQueueEvents);
@@ -570,12 +589,12 @@ async function enqueueAppointmentReminders() {
         }
       });
 
-      for (const log of result.logs) {
+      for (const dispatch of result.dispatches) {
         await notificationDispatchQueue.add(
           NOTIFICATION_DISPATCH_JOB,
-          { notificationLogId: log.id },
+          { notificationLogId: dispatch.notificationLogId },
           {
-            jobId: getNotificationDispatchJobId(log.id)
+            jobId: getNotificationDispatchJobId(dispatch.notificationLogId)
           }
         );
         queued += 1;
@@ -673,17 +692,17 @@ async function enqueueRefundNotification(refundId: string, eventCode: string) {
     }
   });
 
-  for (const log of result.logs) {
+  for (const dispatch of result.dispatches) {
     await notificationDispatchQueue.add(
       NOTIFICATION_DISPATCH_JOB,
-      { notificationLogId: log.id },
+      { notificationLogId: dispatch.notificationLogId },
       {
-        jobId: getNotificationDispatchJobId(log.id)
+        jobId: getNotificationDispatchJobId(dispatch.notificationLogId)
       }
     );
   }
 
-  return { queued: result.logs.length };
+  return { queued: result.dispatches.length };
 }
 
 async function enqueueRequestedRefunds() {

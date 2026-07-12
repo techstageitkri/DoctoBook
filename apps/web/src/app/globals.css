@@ -3352,6 +3352,28 @@ textarea:focus-visible {
   padding: 18px;
 }
 
+.patient-v2-auth-page {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  background: #f6f8f7;
+  padding: 24px;
+}
+
+.patient-v2-auth-panel {
+  display: grid;
+  width: min(100%, 460px);
+  gap: 16px;
+}
+
+.patient-v2-token-fallback {
+  display: grid;
+  gap: 6px;
+  color: #4f5c55;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .patient-v2-main .patient-content-grid {
   grid-template-columns: minmax(0, 1.18fr) minmax(320px, 0.82fr);
   align-items: start;
@@ -3552,6 +3574,53 @@ textarea:focus-visible {
   font-size: 10px;
   line-height: 1.5;
   text-align: center;
+}
+
+.patient-v2-check-email {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  border: 1px solid #badbcf;
+  border-radius: 7px;
+  background: #eff9f5;
+  color: #0f4f42;
+  padding: 12px;
+}
+
+.patient-v2-check-email div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.patient-v2-check-email strong {
+  font-size: 13px;
+}
+
+.patient-v2-check-email span {
+  overflow-wrap: anywhere;
+  color: #4b6259;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.patient-v2-check-email button {
+  grid-column: 1 / -1;
+  justify-self: start;
+  border: 1px solid #9fcfc0;
+  border-radius: 7px;
+  background: #fff;
+  color: #08705b;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 8px 10px;
+}
+
+.patient-v2-check-email button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
 }
 
 .patient-v2-appointment-focus {

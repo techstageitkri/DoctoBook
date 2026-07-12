@@ -13,6 +13,7 @@ import {
   Prisma,
   UserStatus
 } from "@doctobook/database";
+import { parseServerEnv } from "@doctobook/config";
 import { createLogger } from "@doctobook/observability";
 import { AuditService } from "../audit/audit.service.js";
 import { AuthService } from "../auth/auth.service.js";
@@ -37,6 +38,9 @@ import {
   RequestClinicAssociationInput,
   UpdateDoctorProfileInput
 } from "./doctor.schemas.js";
+
+const doctorEmailVerificationTtlMinutes = 60;
+const doctorInvitationTtlDays = 14;
 
 @Injectable()
 export class DoctorService {
@@ -131,7 +135,7 @@ export class DoctorService {
         purpose: "email_verification",
         userId: user.id,
         email: input.email,
-        expiresAt: this.addMinutes(new Date(), 60)
+        expiresAt: this.addMinutes(new Date(), doctorEmailVerificationTtlMinutes)
       });
 
       return { user, doctor, verificationToken };
@@ -153,11 +157,18 @@ export class DoctorService {
         userId: result.user.id,
         variables: {
           verification: {
-            token: this.exposeDevelopmentToken(result.verificationToken) ?? "",
-            expiresInMinutes: 60
+            url: "[redacted]",
+            token: "[redacted]",
+            expiresInMinutes: doctorEmailVerificationTtlMinutes
           }
         },
-        idempotencyKeySuffix: result.verificationToken
+        sensitiveVariables: {
+          verification: {
+            url: this.buildWebFragmentUrl("/verify-email", { token: result.verificationToken }),
+            token: result.verificationToken
+          }
+        },
+        idempotencyKeySuffix: this.tokenService.hashToken(result.verificationToken)
       })
     );
 
@@ -818,15 +829,23 @@ export class DoctorService {
       }
     }
 
-    const inviteToken = await this.createVerificationToken(this.prisma, {
-      purpose: "doctor_invitation",
-      email: input.email ?? null,
-      phone: input.phone ?? null,
-      expiresAt: this.addDays(new Date(), 14),
-      metadata: {
-        clinicId,
-        clinicLocationId: input.clinicLocationId ?? null
-      }
+    const inviteToken = await this.prisma.$transaction(async (tx) => {
+      await this.invalidateUnusedTokens(tx, {
+        purpose: "doctor_invitation",
+        email: input.email ?? null,
+        phone: input.phone ?? null
+      });
+
+      return this.createVerificationToken(tx, {
+        purpose: "doctor_invitation",
+        email: input.email ?? null,
+        phone: input.phone ?? null,
+        expiresAt: this.addDays(new Date(), doctorInvitationTtlDays),
+        metadata: {
+          clinicId,
+          clinicLocationId: input.clinicLocationId ?? null
+        }
+      });
     });
 
     await this.auditService.record({
@@ -840,6 +859,29 @@ export class DoctorService {
       userAgent: context.userAgent,
       metadata: { email: input.email ?? null, phone: input.phone ?? null }
     });
+    if (input.email) {
+      await this.safeNotify(() =>
+        this.notificationService.enqueueRecipientEmail({
+          eventCode: "doctor.invitation",
+          recipientEmail: input.email!,
+          clinicId,
+          variables: {
+            invitation: {
+              url: "[redacted]",
+              token: "[redacted]",
+              expiresInDays: doctorInvitationTtlDays
+            }
+          },
+          sensitiveVariables: {
+            invitation: {
+              url: this.buildWebFragmentUrl("/doctor/invitations/accept", { token: inviteToken }),
+              token: inviteToken
+            }
+          },
+          idempotencyKeySuffix: this.tokenService.hashToken(inviteToken)
+        })
+      );
+    }
 
     return {
       invited: true,
@@ -1103,6 +1145,25 @@ export class DoctorService {
     return token;
   }
 
+  private async invalidateUnusedTokens(
+    client: Prisma.TransactionClient | PrismaService,
+    input: {
+      purpose: string;
+      email?: string | null;
+      phone?: string | null;
+    }
+  ) {
+    await client.verificationToken.updateMany({
+      where: {
+        purpose: input.purpose,
+        usedAt: null,
+        ...(input.email ? { email: input.email } : {}),
+        ...(input.phone ? { phone: input.phone } : {})
+      },
+      data: { usedAt: new Date() }
+    });
+  }
+
   private doctorInclude(includeAssociations = false) {
     return {
       user: {
@@ -1203,6 +1264,20 @@ export class DoctorService {
 
   private exposeDevelopmentToken(token: string) {
     return process.env.NODE_ENV === "production" ? undefined : token;
+  }
+
+  private buildWebFragmentUrl(path: string, params: Record<string, string>) {
+    const env = parseServerEnv(process.env);
+    const url = new URL(path, env.WEB_PUBLIC_URL);
+    const fragment = new URLSearchParams();
+
+    for (const [key, value] of Object.entries(params)) {
+      fragment.set(key, value);
+    }
+
+    url.hash = fragment.toString();
+
+    return url.toString();
   }
 
   private async safeNotify(action: () => Promise<unknown>) {

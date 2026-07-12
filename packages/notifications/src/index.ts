@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import {
   NotificationChannel,
   NotificationStatus,
@@ -25,8 +25,27 @@ export const NOTIFICATION_DISPATCH_QUEUE_NAME = "notification-dispatch";
 export const NOTIFICATION_DISPATCH_JOB = "notification.dispatch";
 export const NOTIFICATION_SCHEDULE_REMINDERS_JOB = "notification.reminders.schedule";
 
+export type NotificationDeliveryOverride = {
+  subject?: string | null;
+  body?: string | null;
+  sensitive?: boolean;
+};
+
+export type EncryptedNotificationDelivery = {
+  algorithm: "aes-256-gcm";
+  iv: string;
+  ciphertext: string;
+  tag: string;
+};
+
 export type DispatchNotificationJob = {
   notificationLogId: string;
+  encryptedDelivery?: EncryptedNotificationDelivery;
+};
+
+export type NotificationDispatch = {
+  notificationLogId: string;
+  delivery?: NotificationDeliveryOverride;
 };
 
 export type CreateNotificationEventInput = {
@@ -36,6 +55,17 @@ export type CreateNotificationEventInput = {
   clinicId?: string | null;
   channels?: NotificationChannel[];
   variables?: Record<string, unknown>;
+  sensitiveVariables?: Record<string, unknown>;
+  idempotencyKeySuffix?: string | null;
+  scheduledAt?: Date | null;
+};
+
+export type CreateRecipientEmailNotificationInput = {
+  eventCode: string;
+  recipientEmail: string;
+  clinicId?: string | null;
+  variables?: Record<string, unknown>;
+  sensitiveVariables?: Record<string, unknown>;
   idempotencyKeySuffix?: string | null;
   scheduledAt?: Date | null;
 };
@@ -50,6 +80,7 @@ export type NotificationLogSummary = {
 
 export type CreateNotificationLogsResult = {
   logs: NotificationLogSummary[];
+  dispatches: NotificationDispatch[];
   skipped: Array<{
     channel: NotificationChannel;
     reason: string;
@@ -90,6 +121,7 @@ export async function createNotificationLogs(
   if (!user) {
     return {
       logs: [],
+      dispatches: [],
       skipped: defaultChannels.map((channel) => ({ channel, reason: "user_not_found" }))
     };
   }
@@ -98,6 +130,7 @@ export async function createNotificationLogs(
   const requestedChannels = input.channels?.length ? input.channels : enabledChannels;
   const channels = requestedChannels.filter((channel) => enabledChannels.includes(channel));
   const logs: NotificationLogSummary[] = [];
+  const dispatches: NotificationDispatch[] = [];
   const skipped: CreateNotificationLogsResult["skipped"] = [];
 
   for (const channel of channels) {
@@ -130,6 +163,7 @@ export async function createNotificationLogs(
         },
         ...(input.variables ?? {})
       };
+      const deliveryVariables = mergeTemplateVariables(variables, input.sensitiveVariables);
       const idempotencyKey = createNotificationIdempotencyKey({
         eventCode: input.eventCode,
         channel,
@@ -151,6 +185,18 @@ export async function createNotificationLogs(
 
       if (existing) {
         logs.push(existing);
+        dispatches.push({
+          notificationLogId: existing.id,
+          delivery: input.sensitiveVariables
+            ? {
+                subject: template.subject
+                  ? renderNotificationTemplate(template.subject, deliveryVariables)
+                  : null,
+                body: renderNotificationTemplate(template.body, deliveryVariables),
+                sensitive: true
+              }
+            : undefined
+        });
         continue;
       }
 
@@ -177,16 +223,140 @@ export async function createNotificationLogs(
       });
 
       logs.push(log);
+      dispatches.push({
+        notificationLogId: log.id,
+        delivery: input.sensitiveVariables
+          ? {
+              subject: template.subject
+                ? renderNotificationTemplate(template.subject, deliveryVariables)
+                : null,
+              body: renderNotificationTemplate(template.body, deliveryVariables),
+              sensitive: true
+            }
+          : undefined
+      });
     }
   }
 
-  return { logs, skipped };
+  return { logs, dispatches, skipped };
+}
+
+export async function createRecipientEmailNotificationLogs(
+  prisma: NotificationPrisma,
+  input: CreateRecipientEmailNotificationInput
+): Promise<CreateNotificationLogsResult> {
+  const channel = NotificationChannel.EMAIL;
+  const enabledChannels = await resolveEnabledChannels(prisma);
+
+  if (!enabledChannels.includes(channel)) {
+    return {
+      logs: [],
+      dispatches: [],
+      skipped: [{ channel, reason: "channel_disabled" }]
+    };
+  }
+
+  const template = await resolveTemplate(prisma, {
+    eventCode: input.eventCode,
+    channel,
+    clinicId: input.clinicId ?? null,
+    locale: "en"
+  });
+
+  if (!template) {
+    return {
+      logs: [],
+      dispatches: [],
+      skipped: [{ channel, reason: "missing_template" }]
+    };
+  }
+
+  const variables = input.variables ?? {};
+  const deliveryVariables = mergeTemplateVariables(variables, input.sensitiveVariables);
+  const idempotencyKey = createNotificationIdempotencyKey({
+    eventCode: input.eventCode,
+    channel,
+    userId: input.recipientEmail,
+    recipient: input.recipientEmail,
+    suffix: input.idempotencyKeySuffix
+  });
+  const existing = await prisma.notificationLog.findUnique({
+    where: { idempotencyKey },
+    select: {
+      id: true,
+      channel: true,
+      recipient: true,
+      eventCode: true,
+      idempotencyKey: true
+    }
+  });
+
+  if (existing) {
+    return {
+      logs: [existing],
+      dispatches: [
+        {
+          notificationLogId: existing.id,
+          delivery: input.sensitiveVariables
+            ? {
+                subject: template.subject
+                  ? renderNotificationTemplate(template.subject, deliveryVariables)
+                  : null,
+                body: renderNotificationTemplate(template.body, deliveryVariables),
+                sensitive: true
+              }
+            : undefined
+        }
+      ],
+      skipped: []
+    };
+  }
+
+  const log = await prisma.notificationLog.create({
+    data: {
+      channel,
+      eventCode: input.eventCode,
+      idempotencyKey,
+      recipient: input.recipientEmail,
+      subject: template.subject ? renderNotificationTemplate(template.subject, variables) : null,
+      body: renderNotificationTemplate(template.body, variables),
+      status: NotificationStatus.QUEUED,
+      scheduledAt: input.scheduledAt ?? null
+    },
+    select: {
+      id: true,
+      channel: true,
+      recipient: true,
+      eventCode: true,
+      idempotencyKey: true
+    }
+  });
+
+  return {
+    logs: [log],
+    dispatches: [
+      {
+        notificationLogId: log.id,
+        delivery: input.sensitiveVariables
+          ? {
+              subject: template.subject
+                ? renderNotificationTemplate(template.subject, deliveryVariables)
+                : null,
+              body: renderNotificationTemplate(template.body, deliveryVariables),
+              sensitive: true
+            }
+          : undefined
+      }
+    ],
+    skipped: []
+  };
 }
 
 export async function dispatchNotificationLog(
   prisma: PrismaClient,
   notificationLogId: string,
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = process.env,
+  delivery?: NotificationDeliveryOverride
 ) {
   const prepared = await prisma.$transaction(async (tx) => {
     const updated = await tx.notificationLog.updateMany({
@@ -230,8 +400,8 @@ export async function dispatchNotificationLog(
       notificationLogId: prepared.id,
       channel: prepared.channel,
       recipient: prepared.recipient,
-      subject: prepared.subject,
-      body: prepared.body,
+      subject: delivery?.subject ?? prepared.subject,
+      body: delivery?.body ?? prepared.body,
       eventCode: prepared.eventCode
     });
 
@@ -285,6 +455,68 @@ export async function dispatchNotificationLog(
   }
 }
 
+export function encryptNotificationDelivery(
+  delivery: NotificationDeliveryOverride,
+  secret: string,
+  aad?: string
+): EncryptedNotificationDelivery {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", notificationEncryptionKey(secret), iv);
+
+  if (aad) {
+    cipher.setAAD(Buffer.from(aad, "utf8"));
+  }
+
+  const ciphertext = Buffer.concat([
+    cipher.update(JSON.stringify(delivery), "utf8"),
+    cipher.final()
+  ]);
+
+  return {
+    algorithm: "aes-256-gcm",
+    iv: iv.toString("base64url"),
+    ciphertext: ciphertext.toString("base64url"),
+    tag: cipher.getAuthTag().toString("base64url")
+  };
+}
+
+export function decryptNotificationDelivery(
+  encrypted: EncryptedNotificationDelivery,
+  secret: string,
+  aad?: string
+): NotificationDeliveryOverride {
+  if (encrypted.algorithm !== "aes-256-gcm") {
+    throw new Error(`Unsupported notification delivery encryption: ${encrypted.algorithm}`);
+  }
+
+  const decipher = createDecipheriv(
+    "aes-256-gcm",
+    notificationEncryptionKey(secret),
+    Buffer.from(encrypted.iv, "base64url")
+  );
+
+  if (aad) {
+    decipher.setAAD(Buffer.from(aad, "utf8"));
+  }
+
+  decipher.setAuthTag(Buffer.from(encrypted.tag, "base64url"));
+  const plaintext = Buffer.concat([
+    decipher.update(Buffer.from(encrypted.ciphertext, "base64url")),
+    decipher.final()
+  ]).toString("utf8");
+  const parsed = JSON.parse(plaintext) as NotificationDeliveryOverride;
+
+  return {
+    subject: parsed.subject ?? null,
+    body: parsed.body ?? null,
+    sensitive: parsed.sensitive === true
+  };
+}
+
+function notificationEncryptionKey(secret: string) {
+  return createHash("sha256").update(secret).digest();
+}
+
 export function renderNotificationTemplate(template: string, variables: Record<string, unknown>) {
   return template.replace(/\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g, (_match, path: string) => {
     const value = getPath(variables, path);
@@ -299,6 +531,41 @@ export function renderNotificationTemplate(template: string, variables: Record<s
 
     return String(value);
   });
+}
+
+function mergeTemplateVariables(
+  variables: Record<string, unknown>,
+  sensitiveVariables?: Record<string, unknown>
+) {
+  if (!sensitiveVariables) {
+    return variables;
+  }
+
+  return deepMerge(variables, sensitiveVariables);
+}
+
+function deepMerge(
+  base: Record<string, unknown>,
+  overlay: Record<string, unknown>
+): Record<string, unknown> {
+  const merged: Record<string, unknown> = { ...base };
+
+  for (const [key, value] of Object.entries(overlay)) {
+    const current = merged[key];
+
+    if (isPlainObject(current) && isPlainObject(value)) {
+      merged[key] = deepMerge(current, value);
+      continue;
+    }
+
+    merged[key] = value;
+  }
+
+  return merged;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function resolveRecipients(

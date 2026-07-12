@@ -1,3 +1,4 @@
+import { UnauthorizedException } from "@nestjs/common";
 import { describe, expect, it } from "vitest";
 import { parseServerEnv } from "@doctobook/config";
 import { loginSchema } from "../src/auth/auth.schemas.js";
@@ -6,6 +7,7 @@ import {
   isCookieCsrfOriginAllowed,
   isCorsOriginAllowed
 } from "../src/security/bootstrap-security.js";
+import { SafeHttpExceptionFilter } from "../src/security/safe-http-exception.filter.js";
 
 const baseEnv = {
   DATABASE_URL: "postgresql://user:pass@localhost:5432/doctobook",
@@ -52,5 +54,41 @@ describe("security hardening", () => {
     });
 
     expect(result.success).toBe(false);
+  });
+
+  it("preserves stable client error codes in safe exception responses", () => {
+    let statusCode = 0;
+    let responseBody: unknown;
+    const filter = new SafeHttpExceptionFilter();
+    const host = {
+      switchToHttp: () => ({
+        getRequest: () => ({ id: "request-id", originalUrl: "/v1/auth/login" }),
+        getResponse: () => ({
+          status: (nextStatusCode: number) => {
+            statusCode = nextStatusCode;
+
+            return {
+              json: (body: unknown) => {
+                responseBody = body;
+              }
+            };
+          }
+        })
+      })
+    };
+
+    filter.catch(
+      new UnauthorizedException({
+        code: "EMAIL_VERIFICATION_REQUIRED",
+        message: "Email verification required"
+      }),
+      host as never
+    );
+
+    expect(statusCode).toBe(401);
+    expect(responseBody).toMatchObject({
+      code: "EMAIL_VERIFICATION_REQUIRED",
+      message: "Email verification required"
+    });
   });
 });

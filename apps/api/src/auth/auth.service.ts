@@ -53,6 +53,9 @@ type TokenResponse = {
 };
 
 const accessTokenTtlSeconds = 15 * 60;
+const emailVerificationTtlMinutes = 60;
+const emailVerificationResendThrottleSeconds = 60;
+const passwordResetTtlMinutes = 30;
 
 @Injectable()
 export class AuthService {
@@ -136,7 +139,7 @@ export class AuthService {
         purpose: "email_verification",
         userId: user.id,
         email: input.email,
-        expiresAt: this.addMinutes(new Date(), 60)
+        expiresAt: this.addMinutes(new Date(), emailVerificationTtlMinutes)
       });
 
       return { user, verificationToken };
@@ -157,11 +160,18 @@ export class AuthService {
         userId: result.user.id,
         variables: {
           verification: {
-            token: this.exposeDevelopmentToken(result.verificationToken) ?? "",
-            expiresInMinutes: 60
+            url: "[redacted]",
+            token: "[redacted]",
+            expiresInMinutes: emailVerificationTtlMinutes
           }
         },
-        idempotencyKeySuffix: result.verificationToken
+        sensitiveVariables: {
+          verification: {
+            url: this.buildWebFragmentUrl("/verify-email", { token: result.verificationToken }),
+            token: result.verificationToken
+          }
+        },
+        idempotencyKeySuffix: this.tokenService.hashToken(result.verificationToken)
       })
     );
 
@@ -186,13 +196,24 @@ export class AuthService {
       }
     });
 
-    if (!user || user.status !== UserStatus.ACTIVE) {
+    if (!user) {
       throw new UnauthorizedException("Invalid credentials");
     }
 
     const passwordMatches = await this.passwordService.verify(input.password, user.passwordHash);
 
     if (!passwordMatches) {
+      throw new UnauthorizedException("Invalid credentials");
+    }
+
+    if (user.status === UserStatus.PENDING_VERIFICATION) {
+      throw new UnauthorizedException({
+        code: "EMAIL_VERIFICATION_REQUIRED",
+        message: "Email verification required"
+      });
+    }
+
+    if (user.status !== UserStatus.ACTIVE) {
       throw new UnauthorizedException("Invalid credentials");
     }
 
@@ -368,20 +389,52 @@ export class AuthService {
       select: {
         id: true,
         email: true,
-        emailVerifiedAt: true
+        emailVerifiedAt: true,
+        status: true
       }
     });
 
-    if (!user || user.emailVerifiedAt || !user.email) {
+    if (!user || user.emailVerifiedAt || !user.email || user.status === UserStatus.ACTIVE) {
       return { sent: true };
     }
 
-    const verificationToken = await this.createVerificationToken(this.prisma, {
-      purpose: "email_verification",
-      userId: user.id,
-      email: user.email,
-      expiresAt: this.addMinutes(new Date(), 60)
+    const email = user.email;
+    const now = new Date();
+    const verificationToken = await this.prisma.$transaction(async (tx) => {
+      const recentToken = await tx.verificationToken.findFirst({
+        where: {
+          userId: user.id,
+          purpose: "email_verification",
+          usedAt: null,
+          expiresAt: { gt: now },
+          createdAt: {
+            gte: this.addSeconds(now, -emailVerificationResendThrottleSeconds)
+          }
+        },
+        select: { id: true }
+      });
+
+      if (recentToken) {
+        return null;
+      }
+
+      await this.invalidateUnusedTokens(tx, {
+        purpose: "email_verification",
+        userId: user.id,
+        email
+      });
+
+      return this.createVerificationToken(tx, {
+        purpose: "email_verification",
+        userId: user.id,
+        email,
+        expiresAt: this.addMinutes(now, emailVerificationTtlMinutes)
+      });
     });
+
+    if (!verificationToken) {
+      return { sent: true };
+    }
 
     await this.auditService.record({
       actorUserId: user.id,
@@ -397,11 +450,18 @@ export class AuthService {
         userId: user.id,
         variables: {
           verification: {
-            token: this.exposeDevelopmentToken(verificationToken) ?? "",
-            expiresInMinutes: 60
+            url: "[redacted]",
+            token: "[redacted]",
+            expiresInMinutes: emailVerificationTtlMinutes
           }
         },
-        idempotencyKeySuffix: verificationToken
+        sensitiveVariables: {
+          verification: {
+            url: this.buildWebFragmentUrl("/verify-email", { token: verificationToken }),
+            token: verificationToken
+          }
+        },
+        idempotencyKeySuffix: this.tokenService.hashToken(verificationToken)
       })
     );
 
@@ -485,11 +545,20 @@ export class AuthService {
       return { sent: true };
     }
 
-    const resetToken = await this.createVerificationToken(this.prisma, {
-      purpose: "password_reset",
-      userId: user.id,
-      email: user.email,
-      expiresAt: this.addMinutes(new Date(), 30)
+    const email = user.email;
+    const resetToken = await this.prisma.$transaction(async (tx) => {
+      await this.invalidateUnusedTokens(tx, {
+        purpose: "password_reset",
+        userId: user.id,
+        email
+      });
+
+      return this.createVerificationToken(tx, {
+        purpose: "password_reset",
+        userId: user.id,
+        email,
+        expiresAt: this.addMinutes(new Date(), passwordResetTtlMinutes)
+      });
     });
 
     await this.auditService.record({
@@ -506,11 +575,18 @@ export class AuthService {
         userId: user.id,
         variables: {
           passwordReset: {
-            token: this.exposeDevelopmentToken(resetToken) ?? "",
-            expiresInMinutes: 30
+            url: "[redacted]",
+            token: "[redacted]",
+            expiresInMinutes: passwordResetTtlMinutes
           }
         },
-        idempotencyKeySuffix: resetToken
+        sensitiveVariables: {
+          passwordReset: {
+            url: this.buildWebFragmentUrl("/reset-password", { token: resetToken }),
+            token: resetToken
+          }
+        },
+        idempotencyKeySuffix: this.tokenService.hashToken(resetToken)
       })
     );
 
@@ -739,6 +815,25 @@ export class AuthService {
     return token;
   }
 
+  private async invalidateUnusedTokens(
+    client: Prisma.TransactionClient | PrismaService,
+    input: {
+      purpose: string;
+      userId?: string | null;
+      email?: string | null;
+    }
+  ) {
+    await client.verificationToken.updateMany({
+      where: {
+        purpose: input.purpose,
+        usedAt: null,
+        ...(input.userId ? { userId: input.userId } : {}),
+        ...(input.email ? { email: input.email } : {})
+      },
+      data: { usedAt: new Date() }
+    });
+  }
+
   private getRoleCodes(user: UserForAuth): string[] {
     return user.roles.map((userRole) => userRole.role.code);
   }
@@ -757,6 +852,20 @@ export class AuthService {
     return process.env.NODE_ENV === "production" ? undefined : token;
   }
 
+  private buildWebFragmentUrl(path: string, params: Record<string, string>) {
+    const env = parseServerEnv(process.env);
+    const url = new URL(path, env.WEB_PUBLIC_URL);
+    const fragment = new URLSearchParams();
+
+    for (const [key, value] of Object.entries(params)) {
+      fragment.set(key, value);
+    }
+
+    url.hash = fragment.toString();
+
+    return url.toString();
+  }
+
   private async safeNotify(action: () => Promise<unknown>) {
     try {
       await action();
@@ -767,6 +876,10 @@ export class AuthService {
 
   private addMinutes(date: Date, minutes: number) {
     return new Date(date.getTime() + minutes * 60 * 1000);
+  }
+
+  private addSeconds(date: Date, seconds: number) {
+    return new Date(date.getTime() + seconds * 1000);
   }
 
   private addDays(date: Date, days: number) {

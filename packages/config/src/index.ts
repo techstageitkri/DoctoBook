@@ -65,6 +65,7 @@ const baseServerEnvSchema = z.object({
   API_TRUST_PROXY: booleanEnvSchema.default(false),
   API_BODY_LIMIT: z.string().trim().min(1).default("1mb"),
   API_WEBHOOK_BODY_LIMIT: z.string().trim().min(1).default("256kb"),
+  WEB_PUBLIC_URL: z.string().url().default("http://localhost:3000"),
   API_RATE_LIMIT_DISABLED: booleanEnvSchema.default(false),
   API_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().default(60),
   API_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(300),

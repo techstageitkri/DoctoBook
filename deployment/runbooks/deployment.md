@@ -30,6 +30,7 @@ export API_PORT='4001'
 export API_CORS_ORIGINS='https://doctobook.example.com'
 export API_TRUST_PROXY=true
 export NEXT_PUBLIC_API_URL='https://doctobook.example.com'
+export WEB_PUBLIC_URL='https://doctobook-staging.akademifyy.in'
 ```
 
 Add payment, email, SMS, and Firebase variables only when the corresponding provider is enabled.

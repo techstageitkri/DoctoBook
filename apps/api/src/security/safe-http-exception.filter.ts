@@ -89,6 +89,7 @@ export class SafeHttpExceptionFilter implements ExceptionFilter {
     return {
       message: record.message ?? exception.message,
       error: record.error ?? exception.name,
+      ...(record.code ? { code: record.code } : {}),
       ...(record.issues ? { issues: record.issues } : {})
     };
   }

@@ -2,8 +2,31 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import {
+  Bell,
+  CalendarDays,
+  ChevronRight,
+  CircleHelp,
+  CreditCard,
+  HeartPulse,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  Search,
+  ShieldCheck,
+  Star,
+  UserRound,
+  X
+} from "lucide-react";
+import {
+  canCancelRescheduleRequest,
+  canPatientCancel,
+  canPatientReschedule,
+  canPatientReview
+} from "./patient/patient-domain";
 
-type ViewMode = "search" | "booking" | "payment" | "appointments";
+type ViewMode = "dashboard" | "search" | "booking" | "payment" | "appointments" | "payments" | "reviews" | "profile";
 type PaymentMode = "online_required" | "pay_at_clinic" | "online_optional";
 
 type Specialty = {
@@ -351,6 +374,7 @@ export function PatientBookingPortal({
   initialAppointmentId,
   initialView = "search"
 }: PatientBookingPortalProps) {
+  const pathname = usePathname();
   const paymentFormRef = useRef<HTMLFormElement | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>(initialView);
   const [search, setSearch] = useState("");
@@ -396,6 +420,10 @@ export function PatientBookingPortal({
   const [isPolling, setIsPolling] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [pendingCancellation, setPendingCancellation] = useState<PatientAppointment | null>(null);
+  const [cancellationReason, setCancellationReason] = useState("");
 
   const selectedDoctorService = useMemo(
     () =>
@@ -525,7 +553,7 @@ export function PatientBookingPortal({
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [booking?.appointmentId, terminalPayment]);
+  }, [booking?.appointmentId, terminalPayment, session?.accessToken]);
 
   useEffect(() => {
     if (!rescheduleAppointmentId || terminalReschedule) {
@@ -581,7 +609,7 @@ export function PatientBookingPortal({
       );
       setDoctors(response.doctors);
 
-      if (!selectedDoctor && response.doctors[0]) {
+      if (!selectedDoctor && response.doctors[0] && (initialView === "booking" || Boolean(initialDoctorClinicServiceId))) {
         await loadDoctor(response.doctors[0]);
       }
     }, "");
@@ -657,19 +685,19 @@ export function PatientBookingPortal({
     setPatient(response.patient);
   }
 
-  async function loadAppointments() {
-    if (!session?.accessToken) {
-      setViewMode("appointments");
+  async function loadAppointments(token = session?.accessToken, navigate = true) {
+    if (!token) {
+      if (navigate) setViewMode("appointments");
       return;
     }
 
     await runAction(async () => {
       const response = await tokenRequest<{ appointments: PatientAppointment[] }>(
         "/v1/patient/appointments",
-        session.accessToken
+        token
       );
       setAppointments(response.appointments);
-      setViewMode("appointments");
+      if (navigate) setViewMode("appointments");
     }, "");
   }
 
@@ -679,12 +707,14 @@ export function PatientBookingPortal({
       return;
     }
 
-    const reason = window.prompt("Cancellation reason");
-    const trimmedReason = reason?.trim();
+    setPendingCancellation(appointment);
+    setCancellationReason("");
+  }
 
-    if (!trimmedReason) {
-      return;
-    }
+  async function confirmPatientCancellation() {
+    if (!session?.accessToken || !pendingCancellation || !cancellationReason.trim()) return;
+    const appointment = pendingCancellation;
+    const trimmedReason = cancellationReason.trim();
 
     await runAction(async () => {
       await tokenRequest(`/v1/patient/appointments/${appointment.id}/cancel`, session.accessToken, {
@@ -693,6 +723,8 @@ export function PatientBookingPortal({
       });
       await loadAppointments();
     }, "Appointment cancelled");
+    setPendingCancellation(null);
+    setCancellationReason("");
   }
 
   async function startReschedule(appointment: PatientAppointment) {
@@ -936,6 +968,7 @@ export function PatientBookingPortal({
       });
       setSession(loginResponse);
       await loadPatientProfile(loginResponse.accessToken);
+      await loadAppointments(loginResponse.accessToken, false);
       setNotice("Signed in");
     }, authMode === "register" ? "Account created" : "Signed in");
   }
@@ -1039,6 +1072,7 @@ export function PatientBookingPortal({
 
     setSession(restored);
     await loadPatientProfile(restored.accessToken);
+    await loadAppointments(restored.accessToken, false);
   }
 
   async function publicRequest<T>(path: string, options: RequestInit = {}) {
@@ -1161,58 +1195,117 @@ export function PatientBookingPortal({
     }).catch(() => null);
     setSession(null);
     setPatient(null);
+    setAppointments([]);
+    setProfileMenuOpen(false);
   }
 
-  return (
-    <div className="patient-shell">
-      <aside className="patient-sidebar">
-        <div>
-          <p className="eyebrow">Marketplace</p>
-          <h1>{appName}</h1>
-        </div>
-        <nav>
-          <button className={viewMode === "search" ? "nav-item active" : "nav-item"} onClick={() => setViewMode("search")}>
-            Search
-          </button>
-          <button className={viewMode === "booking" ? "nav-item active" : "nav-item"} onClick={() => setViewMode("booking")}>
-            Booking
-          </button>
-          <button className={viewMode === "payment" ? "nav-item active" : "nav-item"} onClick={() => setViewMode("payment")}>
-            Payment
-          </button>
-          <button className={viewMode === "appointments" ? "nav-item active" : "nav-item"} onClick={() => void loadAppointments()}>
-            Appointments
-          </button>
-          <Link className="nav-item" href="/admin">
-            Admin tools
+  const patientNavigation = [
+    { href: "/patient", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/patient/find-care", label: "Find care", icon: Search },
+    { href: "/patient/appointments", label: "Appointments", icon: CalendarDays },
+    { href: "/patient/payments", label: "Payments", icon: CreditCard },
+    { href: "/patient/reviews", label: "Reviews", icon: Star },
+    { href: "/patient/profile", label: "Profile", icon: UserRound }
+  ];
+
+  const navigationMarkup = (
+    <nav aria-label="Patient navigation" className="patient-v2-nav">
+      {patientNavigation.map((item) => {
+        const Icon = item.icon;
+        const active = item.href === "/patient"
+          ? pathname === item.href
+          : (item.href === "/patient/find-care" && pathname === "/") || pathname === item.href || pathname.startsWith(`${item.href}/`);
+        return (
+          <Link
+            aria-current={active ? "page" : undefined}
+            className={active ? "active" : ""}
+            href={item.href}
+            key={item.href}
+            onClick={() => setMobileNavOpen(false)}
+          >
+            <Icon size={18} />
+            <span>{item.label}</span>
           </Link>
-        </nav>
-        <div className="patient-account">
-          <strong>{patient?.fullName ?? session?.user.fullName ?? "Guest"}</strong>
-          <span>{patient?.email ?? session?.user.email ?? "Sign in to book"}</span>
-          {session ? <button onClick={logout}>Sign out</button> : null}
+        );
+      })}
+    </nav>
+  );
+
+  return (
+    <div className="patient-v2-shell">
+      <aside className="patient-v2-sidebar">
+        <div className="patient-v2-brand">
+          <span><HeartPulse size={22} /></span>
+          <div><strong>{appName}</strong><small>Patient Portal</small></div>
+        </div>
+        {navigationMarkup}
+        <div className="patient-v2-support">
+          <CircleHelp size={18} />
+          <div><strong>Need help?</strong><span>Contact your clinic for appointment support.</span></div>
         </div>
       </aside>
 
-      <main className="patient-main">
-        <section className="topbar patient-topbar">
-          <div>
-            <p className="eyebrow">Patient booking</p>
-            <h2>{viewTitle(viewMode)}</h2>
-          </div>
-          <div className="action-row">
-            <Link className="primary-button" href="/doctors">
-              Find doctors
-            </Link>
-            <Link href="/patient/appointments">My appointments</Link>
-          </div>
-        </section>
+      {mobileNavOpen ? (
+        <div className="patient-v2-mobile-overlay" onMouseDown={(event) => event.target === event.currentTarget && setMobileNavOpen(false)}>
+          <aside aria-label="Mobile patient navigation" className="patient-v2-mobile-drawer">
+            <div className="patient-v2-brand">
+              <span><HeartPulse size={22} /></span>
+              <div><strong>{appName}</strong><small>Patient Portal</small></div>
+              <button aria-label="Close navigation" onClick={() => setMobileNavOpen(false)} type="button"><X size={19} /></button>
+            </div>
+            {navigationMarkup}
+          </aside>
+        </div>
+      ) : null}
 
-        {notice ? <div className="status-message">{notice}</div> : null}
-        {error ? <div className="status-message error">{error}</div> : null}
+      <div className="patient-v2-workspace">
+        <header className="patient-v2-header">
+          <button aria-label="Open navigation" className="patient-v2-menu" onClick={() => setMobileNavOpen(true)} type="button"><Menu size={20} /></button>
+          <div className="patient-v2-breadcrumb">
+            <Link href="/patient">Patient portal</Link><ChevronRight size={13} /><span>{viewTitle(viewMode)}</span>
+          </div>
+          <div className="patient-v2-header-actions">
+            <Link className="patient-v2-find-link" href="/patient/find-care"><Search size={16} />Find care</Link>
+            <button aria-label="Notifications" className="patient-v2-icon-button" type="button"><Bell size={18} /></button>
+            <div className="patient-v2-profile-menu">
+              <button aria-expanded={profileMenuOpen} onClick={() => setProfileMenuOpen((current) => !current)} type="button">
+                <span className="patient-v2-avatar"><UserRound size={17} /></span>
+                <span><strong>{patient?.fullName ?? session?.user.fullName ?? "Guest"}</strong><small>{patient?.email ?? session?.user.email ?? "Sign in to book"}</small></span>
+              </button>
+              {profileMenuOpen ? (
+                <div className="patient-v2-profile-popover">
+                  {session ? <><Link href="/patient/profile" onClick={() => setProfileMenuOpen(false)}><UserRound size={16} />Profile</Link><button onClick={logout} type="button"><LogOut size={16} />Sign out</button></> : <Link href="/patient/find-care" onClick={() => setProfileMenuOpen(false)}><ShieldCheck size={16} />Sign in while booking</Link>}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </header>
 
-        {viewMode === "search" ? (
-          <SearchView
+        <main className="patient-v2-main">
+          <header className="patient-v2-page-header">
+            <div><p>{viewEyebrow(viewMode)}</p><h1>{viewTitle(viewMode)}</h1><span>{viewDescription(viewMode, patient?.fullName ?? session?.user.fullName)}</span></div>
+            <div>{viewMode !== "search" && viewMode !== "booking" ? <Link className="primary-button" href="/patient/find-care"><Search size={16} />Book appointment</Link> : null}</div>
+          </header>
+
+          {notice ? <div className="patient-v2-alert success" role="status">{notice}</div> : null}
+          {error ? <div className="patient-v2-alert error" role="alert">{error}</div> : null}
+
+          {viewMode === "dashboard" ? (
+            <PatientDashboard
+              appointments={appointments}
+              authForm={authForm}
+              authMode={authMode}
+              isLoading={isLoading}
+              patient={patient}
+              session={session}
+              setAuthForm={setAuthForm}
+              setAuthMode={setAuthMode}
+              onSubmitAuth={submitAuth}
+            />
+          ) : null}
+
+          {viewMode === "search" ? (
+            <SearchView
             search={search}
             setSearch={setSearch}
             selectedSpecialtyId={selectedSpecialtyId}
@@ -1228,11 +1321,11 @@ export function PatientBookingPortal({
             isLoading={isLoading}
             onSearch={() => void loadDoctors()}
             onSelectDoctor={(doctor) => void loadDoctor(doctor)}
-          />
-        ) : null}
+            />
+          ) : null}
 
-        {viewMode === "booking" ? (
-          <BookingView
+          {viewMode === "booking" ? (
+            <BookingView
             selectedDoctor={selectedDoctor}
             doctorReviews={doctorReviews}
             doctorServices={doctorServices}
@@ -1258,21 +1351,21 @@ export function PatientBookingPortal({
             onSubmitAuth={submitAuth}
             onRefreshSlots={() => void loadAvailability()}
             onSubmitBooking={() => void submitBooking()}
-          />
-        ) : null}
+            />
+          ) : null}
 
-        {viewMode === "payment" ? (
-          <PaymentView
+          {viewMode === "payment" ? (
+            <PaymentView
             booking={booking}
             paymentStatus={paymentStatus}
             paymentFormRef={paymentFormRef}
             isPolling={isPolling && !terminalPayment}
             onRefresh={() => booking?.appointmentId && void loadPaymentStatus(booking.appointmentId, false)}
-          />
-        ) : null}
+            />
+          ) : null}
 
-        {viewMode === "appointments" ? (
-          <AppointmentsView
+          {viewMode === "appointments" ? (
+            <AppointmentsView
             session={session}
             appointments={appointments}
             selectedAppointment={selectedRescheduleAppointment}
@@ -1337,11 +1430,123 @@ export function PatientBookingPortal({
               setViewMode("payment");
               void loadPaymentStatus(appointment.id, false);
             }}
-          />
-        ) : null}
-      </main>
+            />
+          ) : null}
+
+          {viewMode === "payments" ? <PatientPaymentsView appointments={appointments} session={session} /> : null}
+          {viewMode === "reviews" ? <PatientReviewsView appointments={appointments} session={session} /> : null}
+          {viewMode === "profile" ? <PatientProfileView patient={patient} session={session} /> : null}
+        </main>
+      </div>
+
+      {pendingCancellation ? (
+        <div className="patient-v2-dialog-overlay" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setPendingCancellation(null)}>
+          <div aria-modal="true" className="patient-v2-dialog" role="alertdialog">
+            <h2>Cancel this appointment?</h2>
+            <p>{pendingCancellation.serviceName} with {pendingCancellation.doctorName} on {formatDateTime(pendingCancellation.startsAt)}.</p>
+            <label>Cancellation reason<textarea autoFocus onChange={(event) => setCancellationReason(event.target.value)} required value={cancellationReason} /></label>
+            <div><button onClick={() => setPendingCancellation(null)} type="button">Keep appointment</button><button className="danger-button" disabled={isLoading || !cancellationReason.trim()} onClick={() => void confirmPatientCancellation()} type="button">Cancel appointment</button></div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
+}
+
+function PatientDashboard({
+  patient,
+  session,
+  appointments,
+  authMode,
+  setAuthMode,
+  authForm,
+  setAuthForm,
+  isLoading,
+  onSubmitAuth
+}: {
+  patient: PatientProfile | null;
+  session: AuthSession | null;
+  appointments: PatientAppointment[];
+  authMode: "login" | "register";
+  setAuthMode: (value: "login" | "register") => void;
+  authForm: { fullName: string; email: string; password: string };
+  setAuthForm: (value: { fullName: string; email: string; password: string }) => void;
+  isLoading: boolean;
+  onSubmitAuth: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  const now = Date.now();
+  const upcoming = appointments
+    .filter((appointment) => new Date(appointment.startsAt).getTime() >= now && !appointment.status.startsWith("cancelled"))
+    .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
+  const nextAppointment = upcoming[0] ?? null;
+  const pendingPayments = appointments.filter((appointment) => appointment.payment && ["initiated", "pending"].includes(appointment.payment.status)).length;
+  const reviewsDue = appointments.filter((appointment) => appointment.status === "completed" && !appointment.review).length;
+
+  if (!session || !patient) {
+    return (
+      <div className="patient-v2-guest-grid">
+        <section className="patient-v2-welcome-card">
+          <span className="patient-v2-brand-icon"><HeartPulse size={24} /></span>
+          <h2>Your care, organized in one place</h2>
+          <p>Find trusted doctors, book verified appointment times, track payments, reschedule visits, and manage reviews securely.</p>
+          <div className="patient-v2-feature-list">
+            <span><ShieldCheck size={17} />Secure patient session</span>
+            <span><CalendarDays size={17} />Live appointment availability</span>
+            <span><CreditCard size={17} />Clear payment and refund status</span>
+          </div>
+          <Link className="primary-button" href="/patient/find-care">Explore available doctors<ChevronRight size={16} /></Link>
+        </section>
+        <PatientAuthCard authForm={authForm} authMode={authMode} isLoading={isLoading} onSubmitAuth={onSubmitAuth} setAuthForm={setAuthForm} setAuthMode={setAuthMode} />
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <section className="patient-v2-metrics" aria-label="Patient summary">
+        <article><span><CalendarDays size={18} />Upcoming</span><strong>{upcoming.length}</strong><small>Scheduled appointments</small></article>
+        <article><span><CreditCard size={18} />Pending payments</span><strong>{pendingPayments}</strong><small>Require your attention</small></article>
+        <article><span><Star size={18} />Reviews due</span><strong>{reviewsDue}</strong><small>Completed visits</small></article>
+      </section>
+      <div className="patient-v2-dashboard-grid">
+        <section className="patient-v2-card patient-v2-next-appointment">
+          <div className="patient-v2-card-heading"><div><p>Next appointment</p><h2>{nextAppointment ? nextAppointment.serviceName : "Nothing scheduled"}</h2></div>{nextAppointment ? <span className={`status-badge status-${nextAppointment.status}`}>{humanize(nextAppointment.status)}</span> : null}</div>
+          {nextAppointment ? <><div className="patient-v2-appointment-focus"><span className="patient-v2-date-tile"><strong>{new Intl.DateTimeFormat("en", { day: "2-digit" }).format(new Date(nextAppointment.startsAt))}</strong><small>{new Intl.DateTimeFormat("en", { month: "short" }).format(new Date(nextAppointment.startsAt))}</small></span><div><strong>{nextAppointment.doctorName}</strong><span>{nextAppointment.clinicName}</span><span>{formatDateTime(nextAppointment.startsAt)}</span><span>{nextAppointment.clinicLocationName ?? nextAppointment.clinicCity}</span></div></div><Link href="/patient/appointments">Manage appointment<ChevronRight size={15} /></Link></> : <div className="patient-v2-empty-compact"><p>You have no upcoming visits.</p><Link className="primary-button" href="/patient/find-care">Find a doctor</Link></div>}
+        </section>
+        <section className="patient-v2-card">
+          <div className="patient-v2-card-heading"><div><p>Quick actions</p><h2>What would you like to do?</h2></div></div>
+          <div className="patient-v2-quick-actions"><Link href="/patient/find-care"><Search size={18} /><span><strong>Find care</strong><small>Search doctors and available times</small></span><ChevronRight size={16} /></Link><Link href="/patient/appointments"><CalendarDays size={18} /><span><strong>Appointments</strong><small>Reschedule, cancel, or check status</small></span><ChevronRight size={16} /></Link><Link href="/patient/payments"><CreditCard size={18} /><span><strong>Payments</strong><small>Track payments and refunds</small></span><ChevronRight size={16} /></Link></div>
+        </section>
+      </div>
+    </>
+  );
+}
+
+function PatientAuthCard({ authMode, setAuthMode, authForm, setAuthForm, isLoading, onSubmitAuth }: { authMode: "login" | "register"; setAuthMode: (value: "login" | "register") => void; authForm: { fullName: string; email: string; password: string }; setAuthForm: (value: { fullName: string; email: string; password: string }) => void; isLoading: boolean; onSubmitAuth: (event: FormEvent<HTMLFormElement>) => void }) {
+  return <form className="patient-v2-card patient-v2-auth-card" onSubmit={onSubmitAuth}><div className="patient-v2-card-heading"><div><p>Secure access</p><h2>{authMode === "login" ? "Sign in to your account" : "Create your patient account"}</h2></div></div><div className="segmented"><button className={authMode === "login" ? "active" : ""} onClick={() => setAuthMode("login")} type="button">Sign in</button><button className={authMode === "register" ? "active" : ""} onClick={() => setAuthMode("register")} type="button">Register</button></div>{authMode === "register" ? <label>Full name<input autoComplete="name" onChange={(event) => setAuthForm({ ...authForm, fullName: event.target.value })} required value={authForm.fullName} /></label> : null}<label>Email address<input autoComplete="username" onChange={(event) => setAuthForm({ ...authForm, email: event.target.value })} required type="email" value={authForm.email} /></label><label>Password<input autoComplete={authMode === "login" ? "current-password" : "new-password"} minLength={8} onChange={(event) => setAuthForm({ ...authForm, password: event.target.value })} required type="password" value={authForm.password} /></label><button className="primary-button" disabled={isLoading} type="submit">{isLoading ? "Please wait…" : authMode === "login" ? "Sign in securely" : "Create account"}</button><small>DoctoBook uses a secure HttpOnly refresh cookie. Your authentication token is never stored in browser storage.</small></form>;
+}
+
+function PatientPaymentsView({ appointments, session }: { appointments: PatientAppointment[]; session: AuthSession | null }) {
+  const paymentAppointments = appointments.filter((appointment) => appointment.payment);
+  const refunds = appointments.flatMap((appointment) => appointment.refunds.map((refund) => ({ ...refund, appointment })));
+  const paidTotal = paymentAppointments.filter((appointment) => appointment.payment?.status === "successful").reduce((sum, appointment) => sum + Number(appointment.payment?.amountMinor ?? 0), 0);
+  if (!session) return <PatientLockedState title="Sign in to view payments" description="Payment history and refund details are available after secure sign-in." />;
+  return <><section className="patient-v2-metrics"><article><span><CreditCard size={18} />Successful payments</span><strong>{paymentAppointments.filter((item) => item.payment?.status === "successful").length}</strong><small>{formatMoney(String(paidTotal), paymentAppointments[0]?.payment?.currency ?? "LKR")}</small></article><article><span><CalendarDays size={18} />Payment records</span><strong>{paymentAppointments.length}</strong><small>Across your appointments</small></article><article><span><HeartPulse size={18} />Refunds</span><strong>{refunds.length}</strong><small>Requested or processed</small></article></section><div className="patient-v2-dashboard-grid"><section className="patient-v2-card"><div className="patient-v2-card-heading"><div><p>Payment history</p><h2>Recent appointment payments</h2></div></div><div className="patient-v2-activity-list">{paymentAppointments.map((appointment) => <article key={appointment.id}><span className="patient-v2-list-icon"><CreditCard size={17} /></span><div><strong>{appointment.serviceName}</strong><span>{appointment.doctorName} · {formatDate(appointment.startsAt)}</span></div><div><strong>{formatMoney(appointment.payment!.amountMinor, appointment.payment!.currency)}</strong><span className={`status-badge status-${appointment.payment!.status}`}>{humanize(appointment.payment!.status)}</span></div></article>)}{!paymentAppointments.length ? <div className="patient-v2-empty-compact"><p>No payment records yet.</p></div> : null}</div></section><section className="patient-v2-card"><div className="patient-v2-card-heading"><div><p>Refund tracking</p><h2>Refund requests</h2></div></div><div className="patient-v2-activity-list">{refunds.map(({ appointment, ...refund }) => <article key={refund.id}><span className="patient-v2-list-icon"><CreditCard size={17} /></span><div><strong>{appointment.serviceName}</strong><span>{refund.reason}</span></div><div><strong>{formatMoney(refund.amountMinor, refund.currency)}</strong><span className={`status-badge status-${refund.uiStatus ?? refund.status}`}>{humanize(refund.uiStatus ?? refund.status)}</span></div></article>)}{!refunds.length ? <div className="patient-v2-empty-compact"><p>No refund requests.</p></div> : null}</div></section></div></>;
+}
+
+function PatientReviewsView({ appointments, session }: { appointments: PatientAppointment[]; session: AuthSession | null }) {
+  if (!session) return <PatientLockedState title="Sign in to manage reviews" description="Your completed visits and submitted reviews are private to your account." />;
+  const reviewable = appointments.filter((appointment) => appointment.status === "completed");
+  return <section className="patient-v2-card"><div className="patient-v2-card-heading"><div><p>Your feedback</p><h2>Appointment reviews</h2></div><span>{reviewable.length} completed visits</span></div><div className="patient-v2-review-grid">{reviewable.map((appointment) => <article key={appointment.id}><div><span className="patient-v2-avatar"><Star size={17} /></span><span><strong>{appointment.doctorName}</strong><small>{appointment.serviceName} · {formatDate(appointment.startsAt)}</small></span></div>{appointment.review ? <><strong className="patient-v2-stars">{"★".repeat(appointment.review.rating)}{"☆".repeat(5 - appointment.review.rating)}</strong><p>{appointment.review.comment || appointment.review.title || "Review submitted"}</p><span className={`status-badge status-${appointment.review.status}`}>{humanize(appointment.review.status)}</span></> : <><p>Share feedback after this completed appointment.</p><Link href="/patient/appointments">Write a review</Link></>}</article>)}{!reviewable.length ? <div className="patient-v2-empty-compact"><p>Completed appointments will appear here when they are ready for review.</p></div> : null}</div></section>;
+}
+
+function PatientProfileView({ patient, session }: { patient: PatientProfile | null; session: AuthSession | null }) {
+  if (!session || !patient) return <PatientLockedState title="Sign in to view your profile" description="Your personal details are protected by your patient session." />;
+  return <div className="patient-v2-dashboard-grid"><section className="patient-v2-card"><div className="patient-v2-profile-hero"><span className="patient-v2-avatar patient-v2-avatar-large"><UserRound size={24} /></span><div><h2>{patient.fullName}</h2><p>Patient account</p></div></div><dl className="patient-v2-profile-details"><div><dt>Full name</dt><dd>{patient.fullName}</dd></div><div><dt>Email address</dt><dd>{patient.email || "Not provided"}</dd></div><div><dt>Phone number</dt><dd>{patient.phone || "Not provided"}</dd></div><div><dt>Patient ID</dt><dd>{patient.id}</dd></div></dl></section><section className="patient-v2-card"><div className="patient-v2-card-heading"><div><p>Account security</p><h2>Secure session</h2></div><ShieldCheck size={21} /></div><div className="patient-v2-security-note"><ShieldCheck size={18} /><p>Your session is restored with a secure HttpOnly refresh cookie. Access tokens remain in memory and are never shown or saved in browser storage.</p></div><div className="patient-v2-info-note"><strong>Profile editing is not available yet.</strong><span>The current patient API exposes a read-only profile. Contact support to correct personal information.</span></div></section></div>;
+}
+
+function PatientLockedState({ title, description }: { title: string; description: string }) {
+  return <section className="patient-v2-card patient-v2-locked"><span className="patient-v2-brand-icon"><ShieldCheck size={23} /></span><h2>{title}</h2><p>{description}</p><Link className="primary-button" href="/patient/find-care">Find care and sign in</Link></section>;
 }
 
 function SearchView({
@@ -2060,22 +2265,6 @@ function AppointmentsView({
   );
 }
 
-function canPatientCancel(appointment: PatientAppointment) {
-  return appointment.status === "confirmed" || appointment.status === "pending_payment";
-}
-
-function canPatientReschedule(appointment: PatientAppointment) {
-  return appointment.status === "confirmed" || appointment.status === "pending_payment";
-}
-
-function canPatientReview(appointment: PatientAppointment) {
-  return appointment.status === "completed";
-}
-
-function canCancelRescheduleRequest(request: RescheduleRequestSummary) {
-  return request.status === "pending" || request.status === "pending_payment";
-}
-
 function Avatar({ name }: { name: string }) {
   const initials = name
     .split(/\s+/)
@@ -2151,8 +2340,12 @@ function humanize(value: string) {
 }
 
 function viewTitle(viewMode: ViewMode) {
+  if (viewMode === "dashboard") {
+    return "Dashboard";
+  }
+
   if (viewMode === "booking") {
-    return "Select appointment";
+    return "Book appointment";
   }
 
   if (viewMode === "payment") {
@@ -2160,10 +2353,42 @@ function viewTitle(viewMode: ViewMode) {
   }
 
   if (viewMode === "appointments") {
-    return "Appointments";
+    return "My appointments";
+  }
+
+  if (viewMode === "payments") {
+    return "Payments and refunds";
+  }
+
+  if (viewMode === "reviews") {
+    return "My reviews";
+  }
+
+  if (viewMode === "profile") {
+    return "Profile and security";
   }
 
   return "Find a doctor";
+}
+
+function viewEyebrow(viewMode: ViewMode) {
+  if (viewMode === "search" || viewMode === "booking") return "Find care";
+  if (viewMode === "payment" || viewMode === "payments") return "Financial activity";
+  if (viewMode === "reviews") return "Patient feedback";
+  if (viewMode === "profile") return "Your account";
+  if (viewMode === "appointments") return "Care schedule";
+  return "Patient overview";
+}
+
+function viewDescription(viewMode: ViewMode, patientName?: string) {
+  if (viewMode === "dashboard") return patientName ? `Welcome back, ${patientName.split(" ")[0]}. Here is your care summary.` : "Sign in to organize appointments, payments, and reviews.";
+  if (viewMode === "search") return "Search verified doctors by specialty, service, and live availability.";
+  if (viewMode === "booking") return "Choose a clinic service and an appointment time that works for you.";
+  if (viewMode === "appointments") return "Track upcoming and past visits, reschedule, cancel, or leave feedback.";
+  if (viewMode === "payment") return "Follow payment verification and appointment confirmation in real time.";
+  if (viewMode === "payments") return "Review payment outcomes and follow refund progress.";
+  if (viewMode === "reviews") return "Manage feedback from completed appointments.";
+  return "Review your patient identity and secure session details.";
 }
 
 function safeJsonParse<T>(value: string) {

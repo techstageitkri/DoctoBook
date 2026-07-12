@@ -4,6 +4,9 @@ const uuidSchema = z.string().uuid();
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const optionalTextSchema = z.string().trim().min(1).max(160).optional();
 const limitSchema = z.coerce.number().int().positive().max(500).default(50);
+const latitudeSchema = z.coerce.number().min(-90).max(90).optional();
+const longitudeSchema = z.coerce.number().min(-180).max(180).optional();
+const radiusKmSchema = z.coerce.number().positive().max(500).optional();
 
 export const listPublicClinicsQuerySchema = z.strictObject({
   search: optionalTextSchema,
@@ -11,6 +14,9 @@ export const listPublicClinicsQuerySchema = z.strictObject({
   district: optionalTextSchema,
   specialtyId: uuidSchema.optional(),
   serviceId: uuidSchema.optional(),
+  latitude: latitudeSchema,
+  longitude: longitudeSchema,
+  radiusKm: radiusKmSchema,
   limit: limitSchema
 });
 
@@ -26,6 +32,9 @@ export const listPublicDoctorsQuerySchema = z.strictObject({
   maxFeeMinor: z.coerce.number().int().nonnegative().optional(),
   language: optionalTextSchema,
   minRating: z.coerce.number().min(0).max(5).optional(),
+  latitude: latitudeSchema,
+  longitude: longitudeSchema,
+  radiusKm: radiusKmSchema,
   limit: limitSchema
 });
 

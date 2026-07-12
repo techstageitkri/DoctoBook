@@ -5,13 +5,16 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Bell,
+  Building2,
   CalendarDays,
   ChevronRight,
   CircleHelp,
   CreditCard,
   HeartPulse,
   LayoutDashboard,
+  LocateFixed,
   LogOut,
+  MapPin,
   Menu,
   Search,
   ShieldCheck,
@@ -40,6 +43,57 @@ type MasterService = {
   defaultDurationMinutes: number;
 };
 
+type LocationSummary = {
+  id?: string;
+  name?: string | null;
+  address: string;
+  city: string;
+  district?: string | null;
+  province?: string | null;
+  country?: string;
+  timezone: string;
+  latitude?: string | null;
+  longitude?: string | null;
+  distanceKm?: number | null;
+  isPrimary?: boolean;
+};
+
+type ClinicSummary = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  email: string | null;
+  phone: string | null;
+  websiteUrl: string | null;
+  distanceKm: number | null;
+  locations: LocationSummary[];
+  services: Array<{
+    clinicServiceId: string;
+    serviceId: string;
+    name: string;
+    slug: string;
+    description: string | null;
+    defaultDurationMinutes: number;
+  }>;
+  activeDoctorCount: number;
+};
+
+type ClinicDetail = ClinicSummary & {
+  doctors: Array<{
+    doctorClinicId: string;
+    doctorId: string;
+    doctorSlug: string;
+    fullName: string;
+    specialties: Specialty[];
+    ratingSummary: {
+      averageRating: number;
+      reviewCount: number;
+    };
+    location: LocationSummary;
+  }>;
+};
+
 type DoctorSummary = {
   id: string;
   slug: string;
@@ -53,6 +107,7 @@ type DoctorSummary = {
     averageRating: number;
     reviewCount: number;
   };
+  distanceKm: number | null;
   clinics: DoctorClinicSummary[];
 };
 
@@ -67,11 +122,8 @@ type DoctorClinicSummary = {
   clinicName: string;
   clinicLocationId: string;
   clinicLocationName: string | null;
-  location: {
-    address: string;
-    city: string;
-    timezone: string;
-  };
+  distanceKm: number | null;
+  location: LocationSummary;
 };
 
 type DoctorService = {
@@ -391,13 +443,22 @@ export function PatientBookingPortal({
   const pathname = usePathname();
   const paymentFormRef = useRef<HTMLFormElement | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>(initialView);
+  const [searchMode, setSearchMode] = useState<"doctor" | "clinic">("doctor");
   const [search, setSearch] = useState("");
   const [selectedSpecialtyId, setSelectedSpecialtyId] = useState("");
   const [selectedMasterServiceId, setSelectedMasterServiceId] = useState("");
   const [selectedDate, setSelectedDate] = useState(getInitialDate);
+  const [patientLocation, setPatientLocation] = useState<{
+    latitude: number;
+    longitude: number;
+    label: string;
+  } | null>(null);
+  const [radiusKm, setRadiusKm] = useState("50");
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
   const [masterServices, setMasterServices] = useState<MasterService[]>([]);
   const [doctors, setDoctors] = useState<DoctorSummary[]>([]);
+  const [clinics, setClinics] = useState<ClinicSummary[]>([]);
+  const [selectedClinic, setSelectedClinic] = useState<ClinicDetail | null>(null);
   const [selectedDoctor, setSelectedDoctor] = useState<DoctorDetail | null>(null);
   const [doctorServices, setDoctorServices] = useState<DoctorService[]>([]);
   const [selectedDoctorClinicServiceId, setSelectedDoctorClinicServiceId] = useState(
@@ -485,6 +546,7 @@ export function PatientBookingPortal({
     void restorePatientSession();
     void loadReferenceData();
     void loadDoctors();
+    void loadClinics();
   }, []);
 
   useEffect(() => {
@@ -598,6 +660,79 @@ export function PatientBookingPortal({
     setMasterServices(serviceResponse.services);
   }
 
+  function appendLocationParams(params: URLSearchParams) {
+    if (!patientLocation) {
+      return;
+    }
+
+    params.set("latitude", String(patientLocation.latitude));
+    params.set("longitude", String(patientLocation.longitude));
+
+    if (radiusKm.trim()) {
+      params.set("radiusKm", radiusKm.trim());
+    }
+  }
+
+  async function requestPatientLocation() {
+    if (!("geolocation" in navigator)) {
+      setError("Location access is not available in this browser.");
+      return;
+    }
+
+    setIsLoading(true);
+    setError("");
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setPatientLocation({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          label: "Current location"
+        });
+        setNotice("Location captured. Search results will be sorted by distance.");
+        setIsLoading(false);
+      },
+      () => {
+        setError("Unable to access your location. You can still search without distance sorting.");
+        setIsLoading(false);
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 5 * 60 * 1000,
+        timeout: 10000
+      }
+    );
+  }
+
+  async function loadClinics() {
+    await runAction(async () => {
+      const params = new URLSearchParams();
+      params.set("limit", "24");
+
+      if (search.trim()) {
+        params.set("search", search.trim());
+      }
+
+      if (selectedSpecialtyId) {
+        params.set("specialtyId", selectedSpecialtyId);
+      }
+
+      if (selectedMasterServiceId) {
+        params.set("serviceId", selectedMasterServiceId);
+      }
+
+      appendLocationParams(params);
+
+      const response = await publicRequest<{ clinics: ClinicSummary[] }>(
+        `/v1/public/clinics?${params.toString()}`
+      );
+      setClinics(response.clinics);
+      setSelectedClinic((current) =>
+        current && response.clinics.some((clinic) => clinic.id === current.id) ? current : null
+      );
+    }, "");
+  }
+
   async function loadDoctors() {
     await runAction(async () => {
       const params = new URLSearchParams();
@@ -619,6 +754,8 @@ export function PatientBookingPortal({
         params.set("availableDate", selectedDate);
       }
 
+      appendLocationParams(params);
+
       const response = await publicRequest<{ doctors: DoctorSummary[] }>(
         `/v1/public/doctors?${params.toString()}`
       );
@@ -627,6 +764,13 @@ export function PatientBookingPortal({
       if (!selectedDoctor && response.doctors[0] && (initialView === "booking" || Boolean(initialDoctorClinicServiceId))) {
         await loadDoctor(response.doctors[0]);
       }
+    }, "");
+  }
+
+  async function loadClinic(clinic: ClinicSummary) {
+    await runAction(async () => {
+      const detail = await publicRequest<ClinicDetail>(`/v1/public/clinics/${clinic.slug}`);
+      setSelectedClinic(detail);
     }, "");
   }
 
@@ -1347,6 +1491,8 @@ export function PatientBookingPortal({
 
           {viewMode === "search" ? (
             <SearchView
+            searchMode={searchMode}
+            setSearchMode={setSearchMode}
             search={search}
             setSearch={setSearch}
             selectedSpecialtyId={selectedSpecialtyId}
@@ -1355,13 +1501,21 @@ export function PatientBookingPortal({
             setSelectedMasterServiceId={setSelectedMasterServiceId}
             selectedDate={selectedDate}
             setSelectedDate={setSelectedDate}
+            patientLocation={patientLocation}
+            radiusKm={radiusKm}
+            setRadiusKm={setRadiusKm}
             specialties={specialties}
             masterServices={masterServices}
             doctors={doctors}
+            clinics={clinics}
+            selectedClinic={selectedClinic}
             selectedDoctor={selectedDoctor}
             isLoading={isLoading}
-            onSearch={() => void loadDoctors()}
+            onSearch={() => void (searchMode === "clinic" ? loadClinics() : loadDoctors())}
+            onUseLocation={() => void requestPatientLocation()}
             onSelectDoctor={(doctor) => void loadDoctor(doctor)}
+            onSelectClinic={(clinic) => void loadClinic(clinic)}
+            onBookClinicDoctor={(doctorSlug) => void loadDoctorBySlug(doctorSlug)}
             />
           ) : null}
 
@@ -1645,6 +1799,8 @@ function PatientLockedState({ title, description }: { title: string; description
 }
 
 function SearchView({
+  searchMode,
+  setSearchMode,
   search,
   setSearch,
   selectedSpecialtyId,
@@ -1653,14 +1809,24 @@ function SearchView({
   setSelectedMasterServiceId,
   selectedDate,
   setSelectedDate,
+  patientLocation,
+  radiusKm,
+  setRadiusKm,
   specialties,
   masterServices,
   doctors,
+  clinics,
+  selectedClinic,
   selectedDoctor,
   isLoading,
   onSearch,
-  onSelectDoctor
+  onUseLocation,
+  onSelectDoctor,
+  onSelectClinic,
+  onBookClinicDoctor
 }: {
+  searchMode: "doctor" | "clinic";
+  setSearchMode: (value: "doctor" | "clinic") => void;
   search: string;
   setSearch: (value: string) => void;
   selectedSpecialtyId: string;
@@ -1669,25 +1835,39 @@ function SearchView({
   setSelectedMasterServiceId: (value: string) => void;
   selectedDate: string;
   setSelectedDate: (value: string) => void;
+  patientLocation: { latitude: number; longitude: number; label: string } | null;
+  radiusKm: string;
+  setRadiusKm: (value: string) => void;
   specialties: Specialty[];
   masterServices: MasterService[];
   doctors: DoctorSummary[];
+  clinics: ClinicSummary[];
+  selectedClinic: ClinicDetail | null;
   selectedDoctor: DoctorDetail | null;
   isLoading: boolean;
   onSearch: () => void;
+  onUseLocation: () => void;
   onSelectDoctor: (doctor: DoctorSummary) => void;
+  onSelectClinic: (clinic: ClinicSummary) => void;
+  onBookClinicDoctor: (doctorSlug: string) => void;
 }) {
+  const resultCount = searchMode === "clinic" ? clinics.length : doctors.length;
+
   return (
     <div className="patient-content-grid">
       <section className="panel patient-search-panel">
         <div className="panel-header">
           <h3>Find care</h3>
-          <span>{doctors.length} doctors</span>
+          <span>{resultCount} {searchMode === "clinic" ? "clinics" : "doctors"}</span>
+        </div>
+        <div className="segmented">
+          <button className={searchMode === "doctor" ? "active" : ""} onClick={() => setSearchMode("doctor")} type="button"><UserRound size={16} />Find a doctor</button>
+          <button className={searchMode === "clinic" ? "active" : ""} onClick={() => setSearchMode("clinic")} type="button"><Building2 size={16} />Find a clinic</button>
         </div>
         <div className="patient-search-controls">
           <label className="field">
             Search
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Doctor or specialty" />
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={searchMode === "clinic" ? "Clinic, service, or area" : "Doctor or specialty"} />
           </label>
           <label className="field">
             Specialty
@@ -1715,19 +1895,42 @@ function SearchView({
             Date
             <input min={todayDateString()} type="date" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)} />
           </label>
+          <label className="field">
+            Radius
+            <select value={radiusKm} onChange={(event) => setRadiusKm(event.target.value)}>
+              <option value="">Any distance</option>
+              <option value="5">Within 5 km</option>
+              <option value="10">Within 10 km</option>
+              <option value="25">Within 25 km</option>
+              <option value="50">Within 50 km</option>
+              <option value="100">Within 100 km</option>
+            </select>
+          </label>
+          <button disabled={isLoading} onClick={onUseLocation} type="button">
+            <LocateFixed size={16} />
+            {patientLocation ? "Update location" : "Use my location"}
+          </button>
           <button className="primary-button" disabled={isLoading} onClick={onSearch}>
             Search
           </button>
         </div>
+        <div className="patient-v2-info-note">
+          <MapPin size={17} />
+          <span>
+            {patientLocation
+              ? `Sorting from ${patientLocation.label}: ${patientLocation.latitude.toFixed(4)}, ${patientLocation.longitude.toFixed(4)}`
+              : "Allow location access to sort doctors and clinics by nearest branch."}
+          </span>
+        </div>
       </section>
 
       <section className="patient-results">
-        {doctors.length === 0 ? (
+        {searchMode === "doctor" && doctors.length === 0 ? (
           <span className="empty-state">
             No doctors have available slots for the selected date. Try another date or clear filters.
           </span>
         ) : null}
-        {doctors.map((doctor) => (
+        {searchMode === "doctor" ? doctors.map((doctor) => (
           <button
             key={doctor.id}
             className={selectedDoctor?.id === doctor.id ? "doctor-result selected" : "doctor-result"}
@@ -1741,10 +1944,47 @@ function SearchView({
               </small>
               <small>
                 {doctor.clinics[0]?.clinicName ?? "Clinic"} · {doctor.ratingSummary.averageRating.toFixed(1)} rating
+                {doctor.distanceKm !== null ? ` · ${doctor.distanceKm} km away` : ""}
               </small>
             </span>
           </button>
-        ))}
+        )) : null}
+        {searchMode === "clinic" && clinics.length === 0 ? (
+          <span className="empty-state">
+            No clinics match the selected filters. Try another service or increase the distance radius.
+          </span>
+        ) : null}
+        {searchMode === "clinic" ? clinics.map((clinic) => (
+          <article key={clinic.id} className="doctor-result">
+            <span className="patient-v2-avatar"><Building2 size={17} /></span>
+            <span>
+              <strong>{clinic.name}</strong>
+              <small>{clinic.locations[0]?.address ?? "Clinic address"} · {clinic.locations[0]?.city ?? "Location"}</small>
+              <small>
+                {clinic.activeDoctorCount} doctors · {clinic.services.slice(0, 3).map((service) => service.name).join(", ") || "Services configured"}
+                {clinic.distanceKm !== null ? ` · ${clinic.distanceKm} km away` : ""}
+              </small>
+              {selectedClinic?.id === clinic.id ? (
+                <div className="patient-v2-info-note">
+                  <span>
+                    <strong>Services:</strong> {selectedClinic.services.map((service) => service.name).join(", ") || "No active services"}
+                  </span>
+                  <span>
+                    <strong>Doctors:</strong> {selectedClinic.doctors.length ? selectedClinic.doctors.map((doctor) => doctor.fullName).join(", ") : "No active doctors"}
+                  </span>
+                  <div className="patient-v2-section-actions">
+                    {selectedClinic.doctors.map((doctor) => (
+                      <button key={doctor.doctorClinicId} onClick={() => onBookClinicDoctor(doctor.doctorSlug)} type="button">
+                        Book {doctor.fullName}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </span>
+            <button onClick={() => onSelectClinic(clinic)} type="button">View clinic</button>
+          </article>
+        )) : null}
       </section>
     </div>
   );

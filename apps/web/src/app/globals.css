@@ -3924,6 +3924,24 @@ textarea:focus-visible {
   font-size: 12px;
 }
 
+.patient-v2-section-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.patient-v2-section-actions button {
+  min-height: 34px;
+  border: 1px solid #cbd9d3;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #244237;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 8px 11px;
+}
+
 .patient-v2-locked {
   display: grid;
   min-height: 320px;

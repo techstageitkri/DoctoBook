@@ -63,15 +63,36 @@ export class PublicMarketplaceService {
   }
 
   async listClinics(query: ListPublicClinicsQuery) {
+    const origin = this.getSearchOrigin(query);
     const clinics = await this.prisma.clinic.findMany({
       where: this.buildClinicWhere(query),
       orderBy: [{ name: "asc" }],
-      take: query.limit,
+      take: origin ? Math.min(query.limit * 8, 500) : query.limit,
       include: this.clinicListInclude()
     });
+    const filteredClinics = clinics
+      .map((clinic) => ({
+        clinic,
+        distanceKm: this.nearestClinicDistanceKm(clinic, origin)
+      }))
+      .filter(
+        (entry) =>
+          !origin ||
+          query.radiusKm === undefined ||
+          (entry.distanceKm !== null && entry.distanceKm <= query.radiusKm)
+      )
+      .sort((left, right) =>
+        this.compareDistanceThenName(
+          left.distanceKm,
+          right.distanceKm,
+          left.clinic.name,
+          right.clinic.name
+        )
+      )
+      .slice(0, query.limit);
 
     return {
-      clinics: clinics.map((clinic) => this.serializeClinicSummary(clinic))
+      clinics: filteredClinics.map(({ clinic }) => this.serializeClinicSummary(clinic, origin))
     };
   }
 
@@ -93,6 +114,7 @@ export class PublicMarketplaceService {
   }
 
   async listDoctors(query: ListPublicDoctorsQuery) {
+    const origin = this.getSearchOrigin(query);
     const doctors = await this.prisma.doctor.findMany({
       where: this.buildDoctorWhere(query),
       orderBy: [{ user: { fullName: "asc" } }],
@@ -101,10 +123,28 @@ export class PublicMarketplaceService {
     });
     const filteredDoctors = doctors
       .filter((doctor) => this.matchesFeeFilter(doctor, query))
+      .map((doctor) => ({
+        doctor,
+        distanceKm: this.nearestDoctorDistanceKm(doctor, origin)
+      }))
+      .filter(
+        (entry) =>
+          !origin ||
+          query.radiusKm === undefined ||
+          (entry.distanceKm !== null && entry.distanceKm <= query.radiusKm)
+      )
+      .sort((left, right) =>
+        this.compareDistanceThenName(
+          left.distanceKm,
+          right.distanceKm,
+          left.doctor.user.fullName,
+          right.doctor.user.fullName
+        )
+      )
       .slice(0, query.limit);
 
     return {
-      doctors: filteredDoctors.map((doctor) => this.serializeDoctorSummary(doctor))
+      doctors: filteredDoctors.map(({ doctor }) => this.serializeDoctorSummary(doctor, origin))
     };
   }
 
@@ -573,7 +613,9 @@ export class PublicMarketplaceService {
     return availableSlots;
   }
 
-  private serializeClinicSummary(clinic: ClinicListRecord) {
+  private serializeClinicSummary(clinic: ClinicListRecord, origin?: GeoPoint) {
+    const nearestDistanceKm = this.nearestClinicDistanceKm(clinic, origin);
+
     return {
       id: clinic.id,
       name: clinic.name,
@@ -582,7 +624,8 @@ export class PublicMarketplaceService {
       email: clinic.email,
       phone: clinic.phone,
       websiteUrl: clinic.websiteUrl,
-      locations: clinic.locations.map((location) => this.serializeLocation(location)),
+      distanceKm: this.toRoundedDistance(nearestDistanceKm),
+      locations: clinic.locations.map((location) => this.serializeLocation(location, origin)),
       services: clinic.clinicServices.map((clinicService) =>
         this.serializeClinicServiceSummary(clinicService)
       ),
@@ -607,7 +650,9 @@ export class PublicMarketplaceService {
     };
   }
 
-  private serializeDoctorSummary(doctor: DoctorListRecord) {
+  private serializeDoctorSummary(doctor: DoctorListRecord, origin?: GeoPoint) {
+    const nearestDistanceKm = this.nearestDoctorDistanceKm(doctor, origin);
+
     return {
       id: doctor.id,
       slug: doctor.slug,
@@ -620,8 +665,9 @@ export class PublicMarketplaceService {
         .filter((entry) => entry.specialty.isActive)
         .map((entry) => this.serializeSpecialty(entry.specialty)),
       ratingSummary: this.serializeRatingSummary(doctor.ratingSummary),
+      distanceKm: this.toRoundedDistance(nearestDistanceKm),
       clinics: doctor.clinics.map((doctorClinic) =>
-        this.serializeDoctorClinicSummary(doctorClinic)
+        this.serializeDoctorClinicSummary(doctorClinic, origin)
       )
     };
   }
@@ -649,7 +695,9 @@ export class PublicMarketplaceService {
     };
   }
 
-  private serializeDoctorClinicSummary(doctorClinic: DoctorClinicSummaryRecord) {
+  private serializeDoctorClinicSummary(doctorClinic: DoctorClinicSummaryRecord, origin?: GeoPoint) {
+    const distanceKm = this.distanceKmForLocation(doctorClinic.clinicLocation, origin);
+
     return {
       doctorClinicId: doctorClinic.id,
       clinicId: doctorClinic.clinicId,
@@ -657,7 +705,8 @@ export class PublicMarketplaceService {
       clinicName: doctorClinic.clinic.name,
       clinicLocationId: doctorClinic.clinicLocationId,
       clinicLocationName: doctorClinic.clinicLocation.name,
-      location: this.serializeLocation(doctorClinic.clinicLocation)
+      distanceKm: this.toRoundedDistance(distanceKm),
+      location: this.serializeLocation(doctorClinic.clinicLocation, origin)
     };
   }
 
@@ -720,7 +769,9 @@ export class PublicMarketplaceService {
     };
   }
 
-  private serializeLocation(location: LocationRecord) {
+  private serializeLocation(location: LocationRecord, origin?: GeoPoint) {
+    const distanceKm = this.distanceKmForLocation(location, origin);
+
     return {
       id: location.id,
       name: location.name,
@@ -732,6 +783,7 @@ export class PublicMarketplaceService {
       timezone: location.timezone,
       latitude: location.latitude?.toString() ?? null,
       longitude: location.longitude?.toString() ?? null,
+      distanceKm: this.toRoundedDistance(distanceKm),
       phone: location.phone,
       isPrimary: location.isPrimary
     };
@@ -855,6 +907,69 @@ export class PublicMarketplaceService {
     return "online_optional";
   }
 
+  private getSearchOrigin(query: { latitude?: number; longitude?: number }) {
+    if (query.latitude === undefined || query.longitude === undefined) {
+      return undefined;
+    }
+
+    return {
+      latitude: query.latitude,
+      longitude: query.longitude
+    };
+  }
+
+  private nearestClinicDistanceKm(clinic: ClinicListRecord, origin?: GeoPoint) {
+    if (!origin) {
+      return null;
+    }
+
+    return minNullable(clinic.locations.map((location) => this.distanceKmForLocation(location, origin)));
+  }
+
+  private nearestDoctorDistanceKm(doctor: DoctorListRecord, origin?: GeoPoint) {
+    if (!origin) {
+      return null;
+    }
+
+    return minNullable(
+      doctor.clinics.map((doctorClinic) =>
+        this.distanceKmForLocation(doctorClinic.clinicLocation, origin)
+      )
+    );
+  }
+
+  private distanceKmForLocation(location: LocationRecord, origin?: GeoPoint) {
+    if (!origin || location.latitude === null || location.longitude === null) {
+      return null;
+    }
+
+    return haversineKm(
+      origin.latitude,
+      origin.longitude,
+      Number(location.latitude),
+      Number(location.longitude)
+    );
+  }
+
+  private toRoundedDistance(distanceKm: number | null) {
+    return distanceKm === null ? null : Math.round(distanceKm * 10) / 10;
+  }
+
+  private compareDistanceThenName(
+    leftDistance: number | null,
+    rightDistance: number | null,
+    leftName: string,
+    rightName: string
+  ) {
+    if (leftDistance !== null || rightDistance !== null) {
+      if (leftDistance === null) return 1;
+      if (rightDistance === null) return -1;
+      if (leftDistance !== rightDistance) return leftDistance - rightDistance;
+    }
+
+    return leftName.localeCompare(rightName);
+  }
+
   private normalizeDateRange(fromDate?: string, toDate?: string) {
     const normalizedFromDate = fromDate ?? dateToYmd(new Date());
     const normalizedToDate = toDate ?? addDaysToDateString(normalizedFromDate, 14);
@@ -918,6 +1033,39 @@ function getZonedDateString(date: Date, timeZone: string) {
 
   return `${parts.year}-${parts.month}-${parts.day}`;
 }
+
+function haversineKm(
+  latitudeA: number,
+  longitudeA: number,
+  latitudeB: number,
+  longitudeB: number
+) {
+  const earthRadiusKm = 6371;
+  const deltaLatitude = toRadians(latitudeB - latitudeA);
+  const deltaLongitude = toRadians(longitudeB - longitudeA);
+  const startLatitude = toRadians(latitudeA);
+  const endLatitude = toRadians(latitudeB);
+  const a =
+    Math.sin(deltaLatitude / 2) ** 2 +
+    Math.cos(startLatitude) * Math.cos(endLatitude) * Math.sin(deltaLongitude / 2) ** 2;
+
+  return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function toRadians(value: number) {
+  return (value * Math.PI) / 180;
+}
+
+function minNullable(values: Array<number | null>) {
+  const numericValues = values.filter((value): value is number => value !== null);
+
+  return numericValues.length ? Math.min(...numericValues) : null;
+}
+
+type GeoPoint = {
+  latitude: number;
+  longitude: number;
+};
 
 type ClinicListRecord = Prisma.ClinicGetPayload<{
   include: ReturnType<PublicMarketplaceService["clinicListInclude"]>;

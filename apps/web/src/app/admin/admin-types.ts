@@ -4,7 +4,7 @@ export type PaymentMode = "ONLINE_REQUIRED" | "PAY_AT_CLINIC" | "ONLINE_OPTIONAL
 
 export type ClinicHour = { id: string; dayOfWeek: number; opensAt: string | null; closesAt: string | null; isClosed: boolean; effectiveFrom?: string | null; effectiveTo?: string | null };
 export type ClinicClosure = { id: string; startsAt: string; endsAt: string; reason: string | null };
-export type ClinicLocation = { id: string; name: string | null; address: string; city: string; district?: string | null; province?: string | null; country: string; timezone: string; phone: string | null; isPrimary: boolean; status: ClinicStatus; hours?: ClinicHour[]; closures?: ClinicClosure[] };
+export type ClinicLocation = { id: string; name: string | null; address: string; city: string; district?: string | null; province?: string | null; country: string; timezone: string; latitude?: string | null; longitude?: string | null; phone: string | null; isPrimary: boolean; status: ClinicStatus; hours?: ClinicHour[]; closures?: ClinicClosure[] };
 export type ClinicAdmin = { id: string; userId: string; status: string; user?: { id: string; email: string | null; phone: string | null; fullName: string | null; status: string } };
 export type Clinic = { id: string; name: string; slug: string; description: string | null; status: ClinicStatus; email: string | null; phone: string | null; websiteUrl: string | null; defaultPaymentMode: PaymentMode | null; cancellationWindowMinutes: number | null; refundProcessingDays: number | null; createdAt: string; updatedAt: string; deletedAt: string | null; locations?: ClinicLocation[]; admins?: ClinicAdmin[] };
 

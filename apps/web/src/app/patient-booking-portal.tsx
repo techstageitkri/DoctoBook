@@ -365,6 +365,10 @@ function getInitialDate() {
   const date = new Date();
   date.setDate(date.getDate() + 1);
 
+  while (date.getDay() === 0 || date.getDay() === 6) {
+    date.setDate(date.getDate() + 1);
+  }
+
   return date.toISOString().slice(0, 10);
 }
 
@@ -988,7 +992,7 @@ export function PatientBookingPortal({
       await loadPatientProfile(loginResponse.accessToken);
       await loadAppointments(loginResponse.accessToken, false);
       setNotice("Signed in");
-    }, authMode === "register" ? "" : "Signed in");
+    }, "");
   }
 
   async function resendVerification(email = pendingVerificationEmail || authForm.email) {
@@ -1601,7 +1605,7 @@ function PatientAuthCard({
             <strong>Check your email</strong>
             <span>We sent a verification link to {pendingVerificationEmail}. Verify your account before signing in.</span>
           </div>
-          <button disabled={isLoading} onClick={onResendVerification} type="button">
+          <button disabled={isLoading} onClick={() => onResendVerification()} type="button">
             {isLoading ? "Sending..." : "Resend verification"}
           </button>
         </div>
@@ -1718,7 +1722,11 @@ function SearchView({
       </section>
 
       <section className="patient-results">
-        {doctors.length === 0 ? <span className="empty-state">No doctors found</span> : null}
+        {doctors.length === 0 ? (
+          <span className="empty-state">
+            No doctors have available slots for the selected date. Try another date or clear filters.
+          </span>
+        ) : null}
         {doctors.map((doctor) => (
           <button
             key={doctor.id}

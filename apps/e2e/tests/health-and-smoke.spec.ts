@@ -25,7 +25,7 @@ test.describe("production smoke checks", () => {
 
     await page.goto("/");
     await expect(page).toHaveTitle(/DoctoBook/u);
-    await expect(page.getByRole("heading", { name: /DoctoBook/u })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Find a doctor/u })).toBeVisible();
     await expect(page.getByRole("navigation").getByRole("button", { name: /^Search$/u })).toBeVisible();
   });
 

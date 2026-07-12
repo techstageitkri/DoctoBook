@@ -4,7 +4,9 @@ import {
   AppointmentStatus,
   ClinicAssociationStatus,
   ClinicStatus,
+  DocumentReviewStatus,
   DoctorStatus,
+  FileVisibility,
   PaymentMode,
   PaymentStatus,
   PrismaClient,
@@ -25,6 +27,8 @@ const fixture = {
   clinicSlug: "e2e-booking-clinic",
   clinicName: "E2E Booking Clinic",
   locationName: "E2E Main Location",
+  documentObjectKey: "fixtures/e2e-booking-doctor/license.pdf",
+  documentType: "medical_license",
   specialtySlug: "e2e-general-medicine",
   specialtyName: "E2E General Medicine",
   serviceSlug: "e2e-general-consultation",
@@ -213,6 +217,19 @@ async function createFixture() {
       doctorId: doctor.id,
       clinicId: clinic.id,
       locationId: location.id,
+      now
+    });
+    const doctorDocument = await upsertApprovedDoctorDocument(tx, {
+      doctorId: doctor.id,
+      uploadedByUserId: doctorUser.id,
+      reviewedByUserId: doctorUser.id,
+      now
+    });
+    await upsertApprovedClinicDocumentReview(tx, {
+      doctorDocumentId: doctorDocument.id,
+      clinicId: clinic.id,
+      doctorClinicId: doctorClinic.id,
+      reviewedByUserId: doctorUser.id,
       now
     });
     await replaceDoctorAvailability(tx, doctorClinic.id);
@@ -465,6 +482,11 @@ async function cleanupFixture() {
       if (patientUser?.patientProfile) {
         await tx.patient.delete({ where: { id: patientUser.patientProfile.id } });
       }
+      await tx.doctorDocumentClinicReview.deleteMany({
+        where: { doctorClinicId: { in: doctorClinicIds } }
+      });
+      await tx.doctorDocument.deleteMany({ where: { doctorId: doctor.id } });
+      await tx.uploadedFile.deleteMany({ where: { objectKey: fixture.documentObjectKey } });
       await tx.authSession.deleteMany({
         where: { userId: { in: [patientUser?.id, doctorUser?.id].filter(Boolean) as string[] } }
       });
@@ -661,6 +683,96 @@ async function upsertDoctorClinic(
   }
 
   return tx.doctorClinic.create({ data });
+}
+
+async function upsertApprovedDoctorDocument(
+  tx: PrismaClientLike,
+  input: {
+    doctorId: string;
+    uploadedByUserId: string;
+    reviewedByUserId: string;
+    now: Date;
+  }
+) {
+  const existingFile = await tx.uploadedFile.findFirst({
+    where: { objectKey: fixture.documentObjectKey, deletedAt: null },
+    select: { id: true }
+  });
+  const fileData = {
+    uploadedByUserId: input.uploadedByUserId,
+    storageProvider: "fixture",
+    bucket: "doctobook-staging-fixtures",
+    objectKey: fixture.documentObjectKey,
+    originalFilename: "e2e-booking-doctor-license.pdf",
+    mimeType: "application/pdf",
+    sizeBytes: 1024n,
+    checksum: "fixture-e2e-doctor-license",
+    visibility: FileVisibility.PRIVATE
+  };
+  const file = existingFile
+    ? await tx.uploadedFile.update({ where: { id: existingFile.id }, data: fileData })
+    : await tx.uploadedFile.create({ data: fileData });
+  const existingDocument = await tx.doctorDocument.findFirst({
+    where: {
+      doctorId: input.doctorId,
+      documentType: fixture.documentType
+    },
+    select: { id: true }
+  });
+  const documentData = {
+    doctorId: input.doctorId,
+    fileId: file.id,
+    documentType: fixture.documentType,
+    platformStatus: DocumentReviewStatus.APPROVED,
+    reviewedByUserId: input.reviewedByUserId,
+    reviewedAt: input.now,
+    rejectionReason: null
+  };
+
+  if (existingDocument) {
+    return tx.doctorDocument.update({
+      where: { id: existingDocument.id },
+      data: documentData
+    });
+  }
+
+  return tx.doctorDocument.create({ data: documentData });
+}
+
+async function upsertApprovedClinicDocumentReview(
+  tx: PrismaClientLike,
+  input: {
+    doctorDocumentId: string;
+    clinicId: string;
+    doctorClinicId: string;
+    reviewedByUserId: string;
+    now: Date;
+  }
+) {
+  return tx.doctorDocumentClinicReview.upsert({
+    where: {
+      doctorDocumentId_doctorClinicId: {
+        doctorDocumentId: input.doctorDocumentId,
+        doctorClinicId: input.doctorClinicId
+      }
+    },
+    update: {
+      clinicId: input.clinicId,
+      status: DocumentReviewStatus.APPROVED,
+      reviewedByUserId: input.reviewedByUserId,
+      reviewedAt: input.now,
+      reason: null
+    },
+    create: {
+      doctorDocumentId: input.doctorDocumentId,
+      clinicId: input.clinicId,
+      doctorClinicId: input.doctorClinicId,
+      status: DocumentReviewStatus.APPROVED,
+      reviewedByUserId: input.reviewedByUserId,
+      reviewedAt: input.now,
+      reason: null
+    }
+  });
 }
 
 async function upsertDoctorClinicService(

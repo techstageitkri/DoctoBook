@@ -42,9 +42,9 @@ export const e2eConfig: E2EConfig = {
   payhereMerchantSecret: optionalEnv("E2E_PAYHERE_MERCHANT_SECRET"),
   payhereWebhookSuccess: process.env.E2E_PAYHERE_WEBHOOK_SUCCESS === "true",
   databaseUrl: optionalEnv("E2E_DATABASE_URL"),
-  bookingDate: process.env.E2E_BOOKING_DATE ?? tomorrowYmd(),
+  bookingDate: process.env.E2E_BOOKING_DATE ?? nextWeekdayYmd(),
   onlineBookingDate:
-    process.env.E2E_ONLINE_BOOKING_DATE ?? process.env.E2E_BOOKING_DATE ?? tomorrowYmd()
+    process.env.E2E_ONLINE_BOOKING_DATE ?? process.env.E2E_BOOKING_DATE ?? nextWeekdayYmd()
 };
 
 export function apiUrl(path: string) {
@@ -73,9 +73,13 @@ function trimTrailingSlash(value: string) {
   return value.replace(/\/+$/u, "");
 }
 
-function tomorrowYmd() {
+function nextWeekdayYmd() {
   const date = new Date();
   date.setUTCDate(date.getUTCDate() + 1);
+
+  while (date.getUTCDay() === 0 || date.getUTCDay() === 6) {
+    date.setUTCDate(date.getUTCDate() + 1);
+  }
 
   return date.toISOString().slice(0, 10);
 }

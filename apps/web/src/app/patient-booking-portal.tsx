@@ -453,7 +453,7 @@ export function PatientBookingPortal({
     longitude: number;
     label: string;
   } | null>(null);
-  const [radiusKm, setRadiusKm] = useState("50");
+  const [radiusKm, setRadiusKm] = useState("");
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
   const [masterServices, setMasterServices] = useState<MasterService[]>([]);
   const [doctors, setDoctors] = useState<DoctorSummary[]>([]);

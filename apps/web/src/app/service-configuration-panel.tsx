@@ -88,11 +88,13 @@ const defaultDoctorServiceForm: DoctorServiceForm = {
 export function ServiceConfigurationPanel({
   apiUrl,
   accessToken,
-  selectedClinicId
+  selectedClinicId,
+  adminOnly = false
 }: {
   apiUrl: string;
   accessToken: string;
   selectedClinicId: string;
+  adminOnly?: boolean;
 }) {
   const [doctorToken, setDoctorToken] = useState("");
   const [clinicId, setClinicId] = useState(selectedClinicId);
@@ -116,6 +118,7 @@ export function ServiceConfigurationPanel({
   );
 
   useEffect(() => {
+    if (adminOnly) return;
     const storedDoctorToken = window.sessionStorage.getItem("doctobook_doctor_access_token");
 
     if (storedDoctorToken) {
@@ -123,17 +126,17 @@ export function ServiceConfigurationPanel({
     }
 
     void loadMasterServices();
-  }, []);
+  }, [adminOnly]);
 
   useEffect(() => {
     setClinicId((current) => current || selectedClinicId);
   }, [selectedClinicId]);
 
   useEffect(() => {
-    if (doctorToken) {
+    if (!adminOnly && doctorToken) {
       window.sessionStorage.setItem("doctobook_doctor_access_token", doctorToken);
     }
-  }, [doctorToken]);
+  }, [adminOnly, doctorToken]);
 
   useEffect(() => {
     setClinicServiceForm((current) => ({
@@ -683,13 +686,13 @@ export function ServiceConfigurationPanel({
             <h3>Doctor services</h3>
             <span>{doctorServices.length} configured</span>
           </div>
-          <Field label="Doctor access token">
+          {!adminOnly && <Field label="Doctor access token">
             <input
               onChange={(event) => setDoctorToken(event.target.value)}
               type="password"
               value={doctorToken}
             />
-          </Field>
+          </Field>}
           <div className="action-row">
             <button
               disabled={!clinicId || !associationId || isLoading}
@@ -698,13 +701,13 @@ export function ServiceConfigurationPanel({
             >
               Load as admin
             </button>
-            <button
+            {!adminOnly && <button
               disabled={!doctorToken || !associationId || isLoading}
               onClick={() => void handleLoadDoctorServices("doctor")}
               type="button"
             >
               Load as doctor
-            </button>
+            </button>}
           </div>
           <div className="compact-list">
             {doctorServices.map((doctorService) => (

@@ -37,14 +37,16 @@ const statusOptions: Array<{ value: ReviewStatus | ""; label: string }> = [
 
 export function ReviewModerationPanel({
   apiUrl,
-  accessToken
+  accessToken,
+  initialStatus = ""
 }: {
   apiUrl: string;
   accessToken: string;
+  initialStatus?: ReviewStatus | "";
 }) {
   const [reviews, setReviews] = useState<AdminReview[]>([]);
   const [selectedReviewId, setSelectedReviewId] = useState("");
-  const [status, setStatus] = useState<ReviewStatus | "">("");
+  const [status, setStatus] = useState<ReviewStatus | "">(initialStatus);
   const [rating, setRating] = useState("");
   const [reason, setReason] = useState("");
   const [isLoading, setIsLoading] = useState(false);

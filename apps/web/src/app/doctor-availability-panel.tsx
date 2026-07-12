@@ -80,11 +80,13 @@ const defaultTimeOffForm: TimeOffForm = {
 export function DoctorAvailabilityPanel({
   apiUrl,
   accessToken,
-  selectedClinicId
+  selectedClinicId,
+  adminOnly = false
 }: {
   apiUrl: string;
   accessToken: string;
   selectedClinicId: string;
+  adminOnly?: boolean;
 }) {
   const [doctorToken, setDoctorToken] = useState("");
   const [clinicId, setClinicId] = useState(selectedClinicId);
@@ -103,22 +105,23 @@ export function DoctorAvailabilityPanel({
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
+    if (adminOnly) return;
     const storedDoctorToken = window.sessionStorage.getItem("doctobook_doctor_access_token");
 
     if (storedDoctorToken) {
       setDoctorToken(storedDoctorToken);
     }
-  }, []);
+  }, [adminOnly]);
 
   useEffect(() => {
     setClinicId((current) => current || selectedClinicId);
   }, [selectedClinicId]);
 
   useEffect(() => {
-    if (doctorToken) {
+    if (!adminOnly && doctorToken) {
       window.sessionStorage.setItem("doctobook_doctor_access_token", doctorToken);
     }
-  }, [doctorToken]);
+  }, [adminOnly, doctorToken]);
 
   async function tokenRequest<T>(path: string, token: string, options: RequestInit = {}) {
     if (!token.trim()) {
@@ -321,13 +324,13 @@ export function DoctorAvailabilityPanel({
           >
             Load as admin
           </button>
-          <button
+          {!adminOnly && <button
             disabled={!doctorToken || !associationId || isLoading}
             onClick={() => void handleLoad("doctor")}
             type="button"
           >
             Load as doctor
-          </button>
+          </button>}
         </div>
       </div>
 
@@ -349,13 +352,13 @@ export function DoctorAvailabilityPanel({
           <Field label="Doctor-clinic association ID">
             <input onChange={(event) => setAssociationId(event.target.value)} value={associationId} />
           </Field>
-          <Field label="Doctor access token">
+          {!adminOnly && <Field label="Doctor access token">
             <input
               onChange={(event) => setDoctorToken(event.target.value)}
               type="password"
               value={doctorToken}
             />
-          </Field>
+          </Field>}
           <Field label="Weekday">
             <select
               onChange={(event) =>

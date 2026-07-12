@@ -1,10 +1,3 @@
-import { ClinicAdminPortal } from "../clinic-admin-portal";
-import { getPublicApiUrl } from "../public-api-url";
+import { AdminOverview } from "./admin-overview";
 
-export default function AdminPage() {
-  return (
-    <ClinicAdminPortal
-      apiUrl={getPublicApiUrl()}
-    />
-  );
-}
+export default function AdminPage() { return <AdminOverview />; }

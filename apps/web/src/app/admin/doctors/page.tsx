@@ -1,2 +1,2 @@
-import { AdminPanelPage } from "../admin-panel-page";
-export default function DoctorsPage() { return <AdminPanelPage section="doctors" />; }
+import { DoctorListPage } from "./doctor-list-page";
+export default function DoctorsPage() { return <DoctorListPage />; }

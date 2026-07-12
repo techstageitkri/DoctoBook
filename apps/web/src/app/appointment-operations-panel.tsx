@@ -71,15 +71,17 @@ const today = new Date().toISOString().slice(0, 10);
 export function AppointmentOperationsPanel({
   apiUrl,
   accessToken,
-  selectedClinicId
+  selectedClinicId,
+  initialStatus = ""
 }: {
   apiUrl: string;
   accessToken: string;
   selectedClinicId: string;
+  initialStatus?: string;
 }) {
   const [mode, setMode] = useState<QueueMode>("clinic");
   const [date, setDate] = useState(today);
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState(initialStatus);
   const [appointments, setAppointments] = useState<AppointmentOperationRecord[]>([]);
   const [selectedAppointmentId, setSelectedAppointmentId] = useState("");
   const [reason, setReason] = useState("");

@@ -21,12 +21,22 @@ const titles: Record<Section, { eyebrow: string; title: string; description: str
   refunds: { eyebrow: "Financial operations", title: "Refund recovery", description: "Investigate failed refunds and perform audited recovery actions." }
 };
 
-export function AdminPanelPage({ section }: { section: Section }) {
+export function AdminPanelPage({ section, variant }: { section: Section; variant?: string }) {
   const { apiUrl, accessToken } = useAdminSession();
   const [clinics, setClinics] = useState<Clinic[]>([]);
   const [selectedClinicId, setSelectedClinicId] = useState("");
   const needsClinic = section === "doctors" || section === "services" || section === "availability" || section === "appointments";
-  const heading = titles[section];
+  const heading = variant === "today"
+    ? { eyebrow: "Daily operations", title: "Today’s appointment queue", description: "Manage today’s check-ins, queue state, appointment progress, and offline payments." }
+    : variant === "cancelled"
+      ? { eyebrow: "Appointment exceptions", title: "Cancelled appointments", description: "Review clinic-cancelled appointments and related operational follow-up." }
+      : variant === "no-shows"
+        ? { eyebrow: "Appointment exceptions", title: "No-show appointments", description: "Review appointments recorded as no-shows for the selected clinic and date." }
+        : variant === "pending-reviews"
+          ? { eyebrow: "Trust and safety", title: "Pending review moderation", description: "Review patient feedback awaiting a moderation decision." }
+          : variant === "hidden-reviews"
+            ? { eyebrow: "Trust and safety", title: "Hidden and rejected reviews", description: "Inspect non-public patient feedback and moderation reasons." }
+            : titles[section];
 
   useEffect(() => {
     if (!needsClinic) return;
@@ -58,10 +68,10 @@ export function AdminPanelPage({ section }: { section: Section }) {
         )}
       </header>
       {section === "doctors" && <DoctorOnboardingPanel apiUrl={apiUrl} accessToken={accessToken} selectedClinicId={selectedClinicId} />}
-      {section === "services" && <ServiceConfigurationPanel apiUrl={apiUrl} accessToken={accessToken} selectedClinicId={selectedClinicId} />}
-      {section === "availability" && <DoctorAvailabilityPanel apiUrl={apiUrl} accessToken={accessToken} selectedClinicId={selectedClinicId} />}
-      {section === "appointments" && <AppointmentOperationsPanel apiUrl={apiUrl} accessToken={accessToken} selectedClinicId={selectedClinicId} />}
-      {section === "reviews" && <ReviewModerationPanel apiUrl={apiUrl} accessToken={accessToken} />}
+      {section === "services" && <ServiceConfigurationPanel adminOnly apiUrl={apiUrl} accessToken={accessToken} selectedClinicId={selectedClinicId} />}
+      {section === "availability" && <DoctorAvailabilityPanel adminOnly apiUrl={apiUrl} accessToken={accessToken} selectedClinicId={selectedClinicId} />}
+      {section === "appointments" && <AppointmentOperationsPanel apiUrl={apiUrl} accessToken={accessToken} initialStatus={variant === "cancelled" ? "cancelled_by_clinic" : variant === "no-shows" ? "no_show" : ""} selectedClinicId={selectedClinicId} />}
+      {section === "reviews" && <ReviewModerationPanel apiUrl={apiUrl} accessToken={accessToken} initialStatus={variant === "pending-reviews" ? "pending_moderation" : variant === "hidden-reviews" ? "hidden" : ""} />}
       {section === "refunds" && <RefundRecoveryPanel apiUrl={apiUrl} accessToken={accessToken} />}
     </>
   );

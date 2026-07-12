@@ -1,4 +1,4 @@
-import { AdminReportsView } from "../../../admin-reports-view";
+import { ClinicDetailPage } from "../clinic-detail-page";
 
 export default async function ClinicReportsPage({
   params
@@ -7,5 +7,5 @@ export default async function ClinicReportsPage({
 }) {
   const { clinicId } = await params;
 
-  return <AdminReportsView clinicId={clinicId} />;
+  return <ClinicDetailPage clinicId={clinicId} tab="reports" />;
 }

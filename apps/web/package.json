@@ -14,6 +14,7 @@
   "dependencies": {
     "@doctobook/config": "workspace:*",
     "@doctobook/shared": "workspace:*",
+    "lucide-react": "latest",
     "next": "latest",
     "react": "latest",
     "react-dom": "latest",

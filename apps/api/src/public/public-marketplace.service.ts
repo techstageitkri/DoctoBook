@@ -22,7 +22,8 @@ const blockingAppointmentStatuses = [
   AppointmentStatus.CONFIRMED,
   AppointmentStatus.CHECKED_IN,
   AppointmentStatus.WAITING,
-  AppointmentStatus.IN_PROGRESS
+  AppointmentStatus.IN_PROGRESS,
+  AppointmentStatus.COMPLETED
 ];
 
 @Injectable()

@@ -464,6 +464,7 @@ export class AppointmentOperationsService {
 
       this.assertTransitionAllowed(appointment.status, nextStatus);
       const now = await this.getDatabaseNow(tx);
+      this.assertStatusTimingAllowed(appointment, nextStatus, now);
       const updateData: Prisma.AppointmentUncheckedUpdateInput = {
         status: nextStatus,
         updatedByUserId: actor.id,
@@ -993,6 +994,19 @@ export class AppointmentOperationsService {
     const rows = await tx.$queryRaw<{ now: Date }[]>`SELECT now()::timestamptz AS "now"`;
 
     return rows[0]?.now ?? new Date();
+  }
+
+  private assertStatusTimingAllowed(
+    appointment: Pick<AppointmentOperationRecord, "startsAt">,
+    toStatus: AppointmentStatus,
+    now: Date
+  ) {
+    if (toStatus === AppointmentStatus.COMPLETED && appointment.startsAt > now) {
+      throw new ConflictException({
+        code: "APPOINTMENT_NOT_STARTED",
+        message: "Cannot complete an appointment before its scheduled start time"
+      });
+    }
   }
 
   private toAppointmentStatus(status: string) {

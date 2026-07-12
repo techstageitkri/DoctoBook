@@ -18,9 +18,10 @@ import {
   PaymentProviderError,
   VerifiedWebhookEvent,
   createPaymentProviderFromEnv,
+  initiateStoredPayment,
   parseGatewayResponse
 } from "@doctobook/payments";
-import { createLogger } from "@doctobook/observability";
+import { createLogger, errorContext } from "@doctobook/observability";
 import { AuthenticatedUser } from "../auth/auth.types.js";
 import { PrismaService } from "../database/prisma.service.js";
 import { NotificationService } from "../notifications/notification.service.js";
@@ -75,7 +76,26 @@ export class PaymentService {
       throw new NotFoundException("Appointment not found");
     }
 
-    const payment = appointment.payments[0] ?? null;
+    let payment = appointment.payments[0] ?? null;
+
+    if (payment && this.shouldInitiateMissingCheckout(appointment.status, payment)) {
+      const paymentId = payment.id;
+
+      try {
+        await initiateStoredPayment(this.prisma, paymentId, process.env);
+        payment = (await this.prisma.payment.findUnique({ where: { id: paymentId } })) ?? payment;
+      } catch (error) {
+        this.logger.warn(
+          "payment.checkout.lazy_initiation_failed",
+          {
+            paymentId,
+            appointmentId: appointment.id,
+            ...errorContext(error)
+          }
+        );
+      }
+    }
+
     const rescheduleHold =
       payment?.rescheduleRequestId
         ? appointment.rescheduleRequests.find((request) => request.id === payment.rescheduleRequestId)
@@ -92,6 +112,23 @@ export class PaymentService {
           )
         : null
     };
+  }
+
+  private shouldInitiateMissingCheckout(
+    appointmentStatus: AppointmentStatus,
+    payment: PatientPaymentRecord
+  ) {
+    if (appointmentStatus !== AppointmentStatus.PENDING_PAYMENT) {
+      return false;
+    }
+
+    if (payment.status !== PaymentStatus.INITIATED && payment.status !== PaymentStatus.PENDING) {
+      return false;
+    }
+
+    const gateway = parseGatewayResponse(payment.gatewayResponse);
+
+    return !gateway?.checkoutUrl;
   }
 
   async processWebhook(

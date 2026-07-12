@@ -140,8 +140,12 @@ describeDatabase("appointment operations integration", () => {
   });
 
   it("lets doctors list and complete only their own appointments", async () => {
-    const fixture = await createAppointmentFixture("doctor-complete");
-    const otherFixture = await createAppointmentFixture("doctor-complete-other");
+    const fixture = await createAppointmentFixture("doctor-complete", {
+      startsAt: pastDate(1)
+    });
+    const otherFixture = await createAppointmentFixture("doctor-complete-other", {
+      startsAt: pastDate(2)
+    });
 
     const listResponse = await operations.listDoctorAppointments(fixture.doctorActor, {
       limit: 20
@@ -166,6 +170,25 @@ describeDatabase("appointment operations integration", () => {
         context
       )
     ).rejects.toThrow("Appointment not found");
+  });
+
+  it("rejects completion before the scheduled appointment start", async () => {
+    const fixture = await createAppointmentFixture("doctor-future-complete", {
+      startsAt: futureDate(14)
+    });
+
+    await expect(
+      operations.updateDoctorAppointmentStatus(
+        fixture.doctorActor,
+        fixture.appointmentId,
+        { status: "completed", reason: "Too early" },
+        context
+      )
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: "APPOINTMENT_NOT_STARTED"
+      })
+    });
   });
 
   it("lets clinic staff check in appointments and record offline payments", async () => {
@@ -411,6 +434,14 @@ describeDatabase("appointment operations integration", () => {
 function futureDate(daysFromNow: number) {
   const date = new Date();
   date.setUTCDate(date.getUTCDate() + daysFromNow);
+  date.setUTCHours(4, 30, 0, 0);
+
+  return date;
+}
+
+function pastDate(daysAgo: number) {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() - daysAgo);
   date.setUTCHours(4, 30, 0, 0);
 
   return date;

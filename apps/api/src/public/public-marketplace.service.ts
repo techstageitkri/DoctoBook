@@ -201,10 +201,10 @@ export class PublicMarketplaceService {
     const slots = await this.prisma.appointmentSlot.findMany({
       where,
       orderBy: [{ startsAt: "asc" }],
-      take: query.limit,
+      take: Math.min(query.limit * 4, 500),
       include: this.slotInclude()
     });
-    const availableSlots = slots.filter((slot) =>
+    const dateFilteredSlots = slots.filter((slot) =>
       this.isSlotInsideLocalDateRange(
         slot.startsAt,
         slot.doctorClinic.clinicLocation.timezone,
@@ -212,9 +212,10 @@ export class PublicMarketplaceService {
         normalizedRange.toDate
       )
     );
+    const availableSlots = await this.filterSlotsWithoutDoctorConflicts(dateFilteredSlots);
 
     return {
-      availability: availableSlots.map((slot) =>
+      availability: availableSlots.slice(0, query.limit).map((slot) =>
         this.serializeAvailabilitySlot(slot, platformPaymentMode)
       )
     };
@@ -547,6 +548,28 @@ export class PublicMarketplaceService {
         }
       }
     } satisfies Prisma.AppointmentSlotInclude;
+  }
+
+  private async filterSlotsWithoutDoctorConflicts(slots: AvailabilitySlotRecord[]) {
+    const availableSlots: AvailabilitySlotRecord[] = [];
+
+    for (const slot of slots) {
+      const conflictingAppointment = await this.prisma.appointment.findFirst({
+        where: {
+          doctorId: slot.doctorClinic.doctorId,
+          status: { in: blockingAppointmentStatuses },
+          startsAt: { lt: slot.endsAt },
+          endsAt: { gt: slot.startsAt }
+        },
+        select: { id: true }
+      });
+
+      if (!conflictingAppointment) {
+        availableSlots.push(slot);
+      }
+    }
+
+    return availableSlots;
   }
 
   private serializeClinicSummary(clinic: ClinicListRecord) {

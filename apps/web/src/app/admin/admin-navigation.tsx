@@ -177,9 +177,33 @@ export function getAdminNavigation() {
     return adminNavigation;
   }
 
-  const visibleGroups = new Set(["Clinics", "Doctors", "Services"]);
+  const demoNavigation: AdminNavGroup[] = [
+    {
+      label: "Clinics",
+      icon: Building2,
+      items: [
+        { href: "/admin/clinics", label: "View clinics", icon: Building2, permission: "clinic.read" },
+        { href: "/admin/clinics/new", label: "Create clinic", icon: UserPlus, permission: "clinic.create" },
+        { href: "/admin/clinics/approvals", label: "Clinic approvals", icon: ClipboardCheck, permission: "clinic.update" }
+      ]
+    },
+    {
+      label: "Doctors",
+      icon: Stethoscope,
+      items: [
+        { href: "/admin/doctors", label: "View doctors", icon: UsersRound, permission: "doctor.read" },
+        { href: "/admin/doctors/pending", label: "Pending approvals", icon: ClipboardCheck, permission: "doctor.manage" },
+        { href: "/admin/doctors/new", label: "Register doctor", icon: UserPlus, permission: "doctor.manage" }
+      ]
+    },
+    {
+      label: "Services",
+      icon: HeartPulse,
+      items: [{ href: "/admin/services", label: "Services", icon: HeartPulse, permission: "service.manage" }]
+    }
+  ];
 
-  return adminNavigation.filter((group) => visibleGroups.has(group.label));
+  return demoNavigation;
 }
 
 const clinicAdminPermissions = new Set<AdminPermission>([

@@ -62,6 +62,8 @@ type DoctorServiceForm = {
   maxReschedules: string;
 };
 
+type ServiceTab = "master" | "clinic" | "doctor" | "fees";
+
 const defaultMasterForm: MasterServiceForm = {
   name: "",
   slug: "",
@@ -108,6 +110,7 @@ export function ServiceConfigurationPanel({
     useState<ClinicServiceForm>(defaultClinicServiceForm);
   const [doctorServiceForm, setDoctorServiceForm] =
     useState<DoctorServiceForm>(defaultDoctorServiceForm);
+  const [activeTab, setActiveTab] = useState<ServiceTab>("master");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -400,7 +403,27 @@ export function ServiceConfigurationPanel({
         </div>
       )}
 
-      <section className="content-grid">
+      <div aria-label="Service configuration sections" className="admin-v2-tabs service-tabs" role="tablist">
+        {[
+          ["master", "Master Services"],
+          ["clinic", "Clinic Services"],
+          ["doctor", "Doctor Services"],
+          ["fees", "Fees & Policies"]
+        ].map(([value, label]) => (
+          <button
+            aria-selected={activeTab === value}
+            className={activeTab === value ? "active" : ""}
+            key={value}
+            onClick={() => setActiveTab(value as ServiceTab)}
+            role="tab"
+            type="button"
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === "master" && <section className="content-grid">
         <div className="panel">
           <div className="panel-header">
             <h3>Master services</h3>
@@ -470,9 +493,9 @@ export function ServiceConfigurationPanel({
             Create service
           </button>
         </form>
-      </section>
+      </section>}
 
-      <section className="content-grid">
+      {activeTab === "clinic" && <section className="content-grid">
         <div className="panel">
           <div className="panel-header">
             <h3>Clinic services</h3>
@@ -551,12 +574,12 @@ export function ServiceConfigurationPanel({
             Enable service
           </button>
         </form>
-      </section>
+      </section>}
 
-      <section className="content-grid">
+      {activeTab === "fees" && <section className="content-grid">
         <form className="panel form-panel" onSubmit={handleCreateDoctorService}>
           <div className="panel-header">
-            <h3>Configure doctor service</h3>
+            <h3>Fees and payment policies</h3>
           </div>
           <Field label="Doctor-clinic association ID">
             <input onChange={(event) => setAssociationId(event.target.value)} value={associationId} />
@@ -677,10 +700,39 @@ export function ServiceConfigurationPanel({
             disabled={!clinicId || !associationId || !doctorServiceForm.clinicServiceId || isLoading}
             type="submit"
           >
-            Configure service
+            Save service policy
           </button>
         </form>
 
+        <div className="panel">
+          <div className="panel-header">
+            <h3>Policy notes</h3>
+            <span>Doctor-clinic service</span>
+          </div>
+          <div className="compact-list">
+            <div className="compact-row">
+              <span>
+                <strong>Payment mode</strong>
+                <small>Choose pay at clinic, online required, online optional, or inherit defaults.</small>
+              </span>
+            </div>
+            <div className="compact-row">
+              <span>
+                <strong>Fee minor</strong>
+                <small>Use minor units, for example LKR 2,500.00 as 250000.</small>
+              </span>
+            </div>
+            <div className="compact-row">
+              <span>
+                <strong>Cancellation and reschedule rules</strong>
+                <small>Set windows and maximum reschedules for this doctor-clinic service.</small>
+              </span>
+            </div>
+          </div>
+        </div>
+      </section>}
+
+      {activeTab === "doctor" && <section className="content-grid">
         <div className="panel form-panel">
           <div className="panel-header">
             <h3>Doctor services</h3>
@@ -737,7 +789,7 @@ export function ServiceConfigurationPanel({
             )}
           </div>
         </div>
-      </section>
+      </section>}
     </section>
   );
 }

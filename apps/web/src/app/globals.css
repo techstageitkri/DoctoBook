@@ -2254,17 +2254,26 @@ textarea:focus {
   scrollbar-width: thin;
 }
 
-.admin-v2-tabs a {
+.admin-v2-tabs a,
+.admin-v2-tabs button {
   flex: 0 0 auto;
+  background: transparent;
   border-bottom: 2px solid transparent;
+  border-left: 0;
+  border-right: 0;
+  border-top: 0;
   color: #68746d;
+  cursor: pointer;
   font-size: 12px;
   font-weight: 800;
+  font-family: inherit;
   padding: 10px 11px 12px;
 }
 
 .admin-v2-tabs a:hover,
-.admin-v2-tabs a.active {
+.admin-v2-tabs a.active,
+.admin-v2-tabs button:hover,
+.admin-v2-tabs button.active {
   border-bottom-color: #0b7962;
   color: #086d59;
 }

@@ -52,7 +52,6 @@ const collapseStorageKey = "doctobook_admin_sidebar_collapsed";
 
 export function AdminShell({ apiUrl, appName, children }: { apiUrl: string; appName: string; children: ReactNode }) {
   const pathname = usePathname();
-  const router = useRouter();
   const [session, setSession] = useState<AuthSession | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -62,7 +61,6 @@ export function AdminShell({ apiUrl, appName, children }: { apiUrl: string; appN
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [search, setSearch] = useState("");
   const navigation = useMemo(() => getAdminNavigation(), []);
   const demoMode = isAdminDemoMode();
   const activeGroup = activeNavigationGroup(pathname) ?? "Dashboard";
@@ -139,14 +137,6 @@ export function AdminShell({ apiUrl, appName, children }: { apiUrl: string; appN
       window.localStorage.setItem(collapseStorageKey, String(next));
       return next;
     });
-  }
-
-  function submitSearch(event: FormEvent) {
-    event.preventDefault();
-    const term = search.trim().toLowerCase();
-    if (!term || !session) return;
-    const item = navigation.flatMap((group) => group.items).find((candidate) => hasAdminPermission(session.user.roles, candidate.permission) && candidate.label.toLowerCase().includes(term));
-    if (item) { router.push(item.href); setSearch(""); }
   }
 
   const contextValue = useMemo<AdminSessionContextValue | null>(() => {
@@ -229,7 +219,7 @@ export function AdminShell({ apiUrl, appName, children }: { apiUrl: string; appN
               <div className="admin-v2-header-context">
                 <nav aria-label="Breadcrumb"><Link href="/admin">Admin</Link>{crumbs.map((crumb, index) => <span key={`${crumb}-${index}`}><ChevronRight size={13} />{crumb}</span>)}</nav>
               </div>
-              <form className="admin-v2-global-search" onSubmit={submitSearch}><Search size={17} /><input aria-label="Global search" onChange={(event) => setSearch(event.target.value)} placeholder="Search admin sections…" value={search} /></form>
+              {!demoMode && <AdminGlobalSearch navigation={navigation} roles={session.user.roles} />}
               <div className="admin-v2-header-actions">
                 {!demoMode && <div className="admin-v2-popover-wrap">
                   <button aria-expanded={notificationsOpen} aria-label="Notifications" className="admin-v2-icon-button" onClick={() => setNotificationsOpen((current) => !current)} type="button"><Bell size={19} /><span className="admin-v2-notification-dot" /></button>
@@ -270,6 +260,41 @@ function AdminDemoHiddenRoute() {
         </div>
       </section>
     </>
+  );
+}
+
+function AdminGlobalSearch({ navigation, roles }: { navigation: ReturnType<typeof getAdminNavigation>; roles: string[] }) {
+  const router = useRouter();
+  const [search, setSearch] = useState("");
+
+  function submitSearch(event: FormEvent) {
+    event.preventDefault();
+    const term = search.trim().toLowerCase();
+
+    if (!term) {
+      return;
+    }
+
+    const item = navigation
+      .flatMap((group) => group.items)
+      .find((candidate) => hasAdminPermission(roles, candidate.permission) && candidate.label.toLowerCase().includes(term));
+
+    if (item) {
+      router.push(item.href);
+      setSearch("");
+    }
+  }
+
+  return (
+    <form className="admin-v2-global-search" onSubmit={submitSearch}>
+      <Search size={17} />
+      <input
+        aria-label="Global search"
+        onChange={(event) => setSearch(event.target.value)}
+        placeholder="Search admin sections..."
+        value={search}
+      />
+    </form>
   );
 }
 

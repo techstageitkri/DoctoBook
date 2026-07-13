@@ -18,9 +18,9 @@ const prisma = new PrismaClient();
 const scrypt = promisify(scryptCallback);
 
 const fixture = {
-  patientEmail: "e2e.patient@doctobook-staging.akademifyy.in",
+  patientEmail: "e2e.patient@doctobook-staging.techstageit.com",
   patientName: "E2E Booking Patient",
-  doctorEmail: "e2e.doctor@doctobook-staging.akademifyy.in",
+  doctorEmail: "e2e.doctor@doctobook-staging.techstageit.com",
   doctorName: "Dr. E2E Booking",
   doctorSlug: "e2e-doctor",
   doctorLicenseNumber: "E2E-BOOKING-LICENSE",
@@ -594,7 +594,7 @@ async function upsertClinic(tx: PrismaClientLike) {
     slug: fixture.clinicSlug,
     description: "Stable clinic for staging booking E2E.",
     status: ClinicStatus.ACTIVE,
-    email: "e2e.clinic@doctobook-staging.akademifyy.in",
+    email: "e2e.clinic@doctobook-staging.techstageit.com",
     phone: "+94110000000",
     defaultPaymentMode: PaymentMode.PAY_AT_CLINIC,
     cancellationWindowMinutes: 30,

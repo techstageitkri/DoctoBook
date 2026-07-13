@@ -28,6 +28,7 @@ import {
   canPatientReschedule,
   canPatientReview
 } from "./patient/patient-domain";
+import { isAdminDemoMode } from "./admin/admin-demo-mode";
 
 type ViewMode = "dashboard" | "search" | "booking" | "payment" | "appointments" | "payments" | "reviews" | "profile";
 type PaymentMode = "online_required" | "pay_at_clinic" | "online_optional";
@@ -440,6 +441,10 @@ export function PatientBookingPortal({
   initialAppointmentId,
   initialView = "search"
 }: PatientBookingPortalProps) {
+  if (isAdminDemoMode()) {
+    return <PatientPortalPending appName={appName} />;
+  }
+
   const pathname = usePathname();
   const paymentFormRef = useRef<HTMLFormElement | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>(initialView);
@@ -1645,6 +1650,34 @@ export function PatientBookingPortal({
         </div>
       ) : null}
     </div>
+  );
+}
+
+function PatientPortalPending({ appName }: { appName: string }) {
+  return (
+    <main className="patient-demo-pending">
+      <section className="patient-demo-pending-panel" aria-labelledby="patient-demo-title">
+        <div className="patient-demo-brand">
+          <span className="patient-v2-brand-icon"><HeartPulse size={26} /></span>
+          <div>
+            <strong>{appName}</strong>
+            <small>Staging demo</small>
+          </div>
+        </div>
+        <div className="patient-demo-copy">
+          <p className="patient-demo-eyebrow">Patient portal</p>
+          <h1 id="patient-demo-title">Patient portal is pending</h1>
+          <p>
+            The patient booking experience is hidden for this first demo. Use the Super Admin console
+            to review clinics, doctors, approvals, and services.
+          </p>
+        </div>
+        <Link className="primary-button patient-demo-admin-link" href="/admin/login">
+          <ShieldCheck size={17} />
+          Go to Super Admin
+        </Link>
+      </section>
+    </main>
   );
 }
 

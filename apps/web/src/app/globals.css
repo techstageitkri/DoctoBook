@@ -2983,6 +2983,85 @@ textarea:focus-visible {
 }
 
 /* Patient portal v2 */
+.patient-demo-pending {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  background:
+    linear-gradient(135deg, rgba(238, 243, 240, 0.94), rgba(247, 250, 248, 0.96)),
+    #eef3f0;
+  padding: 24px;
+}
+
+.patient-demo-pending-panel {
+  display: grid;
+  width: min(100%, 620px);
+  gap: 24px;
+  border: 1px solid #d5ddd9;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 22px 55px rgba(20, 38, 30, 0.12);
+  padding: clamp(24px, 5vw, 42px);
+}
+
+.patient-demo-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid #e1e6e3;
+  padding-bottom: 18px;
+}
+
+.patient-demo-brand > div,
+.patient-demo-copy {
+  display: grid;
+  gap: 2px;
+}
+
+.patient-demo-brand strong {
+  color: #17231d;
+  font-size: 17px;
+}
+
+.patient-demo-brand small {
+  color: #718078;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.patient-demo-copy {
+  gap: 12px;
+}
+
+.patient-demo-eyebrow {
+  color: #08705b;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.patient-demo-copy h1 {
+  color: #17231d;
+  font-size: clamp(30px, 5vw, 48px);
+  line-height: 1.04;
+  margin: 0;
+}
+
+.patient-demo-copy p:last-child {
+  color: #64736c;
+  font-size: 16px;
+  line-height: 1.65;
+  margin: 0;
+  max-width: 54ch;
+}
+
+.patient-demo-admin-link {
+  justify-self: start;
+}
+
 .patient-v2-shell {
   min-height: 100vh;
   background: #f5f7f6;

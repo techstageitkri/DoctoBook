@@ -46,6 +46,12 @@ function uniqueSlug(prefix: string) {
   return `${prefix}-${randomUUID()}`;
 }
 
+function uniquePhone() {
+  return `+94${Math.floor(Math.random() * 1_000_000_000)
+    .toString()
+    .padStart(9, "0")}`;
+}
+
 function asUser(id: string, roles: string[]): AuthenticatedUser {
   return {
     id,
@@ -110,6 +116,74 @@ describeDatabase("clinic management integration", () => {
     expect(secondLocation.isPrimary).toBe(true);
     expect(primaryLocationIds).toEqual([secondLocation.id]);
     expect(auditCount).toBeGreaterThanOrEqual(3);
+  });
+
+  it("returns clear conflicts for duplicate clinic slug, email, and phone", async () => {
+    const slug = uniqueSlug("duplicate-clinic");
+    const email = uniqueEmail("duplicate-clinic");
+    const phone = uniquePhone();
+
+    await clinics.createClinic(
+      superAdmin,
+      createClinicSchema.parse({
+        name: "Duplicate Clinic",
+        slug,
+        email,
+        phone,
+        defaultPaymentMode: PaymentMode.PAY_AT_CLINIC,
+        cancellationWindowMinutes: 30,
+        refundProcessingDays: 7
+      }),
+      context
+    );
+
+    await expect(
+      clinics.createClinic(
+        superAdmin,
+        createClinicSchema.parse({
+          name: "Duplicate Clinic Name Allowed",
+          slug,
+          email: uniqueEmail("duplicate-clinic-other"),
+          phone: uniquePhone(),
+          defaultPaymentMode: PaymentMode.PAY_AT_CLINIC,
+          cancellationWindowMinutes: 30,
+          refundProcessingDays: 7
+        }),
+        context
+      )
+    ).rejects.toThrow("Clinic slug already exists. Use a different slug.");
+
+    await expect(
+      clinics.createClinic(
+        superAdmin,
+        createClinicSchema.parse({
+          name: "Duplicate Clinic Email",
+          slug: uniqueSlug("duplicate-clinic-email"),
+          email,
+          phone: uniquePhone(),
+          defaultPaymentMode: PaymentMode.PAY_AT_CLINIC,
+          cancellationWindowMinutes: 30,
+          refundProcessingDays: 7
+        }),
+        context
+      )
+    ).rejects.toThrow("Clinic email already exists. Use a different email address.");
+
+    await expect(
+      clinics.createClinic(
+        superAdmin,
+        createClinicSchema.parse({
+          name: "Duplicate Clinic Phone",
+          slug: uniqueSlug("duplicate-clinic-phone"),
+          email: uniqueEmail("duplicate-clinic-phone"),
+          phone,
+          defaultPaymentMode: PaymentMode.PAY_AT_CLINIC,
+          cancellationWindowMinutes: 30,
+          refundProcessingDays: 7
+        }),
+        context
+      )
+    ).rejects.toThrow("Clinic phone number already exists. Use a different phone number.");
   });
 
   it("accepts split operating hours and rejects overlapping or invalid ranges", async () => {
@@ -284,7 +358,7 @@ describeDatabase("clinic management integration", () => {
         name: "Clinic Integration Test",
         slug: uniqueSlug(prefix),
         email: uniqueEmail(prefix),
-        phone: "+94770000000",
+        phone: uniquePhone(),
         defaultPaymentMode: PaymentMode.PAY_AT_CLINIC,
         cancellationWindowMinutes: 30,
         refundProcessingDays: 7

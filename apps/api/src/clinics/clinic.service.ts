@@ -33,14 +33,9 @@ export class ClinicService {
 
   async createClinic(actor: AuthenticatedUser, input: CreateClinicInput, context: RequestContext) {
     await this.assertCan(actor, "clinic.create", "platform", null);
+    await this.assertClinicUniqueFields(input);
 
-    const clinic = await this.prisma.clinic.create({
-      data: {
-        ...this.mapClinicCreateInput(input),
-        status: ClinicStatus.DRAFT,
-        createdByUserId: actor.id
-      }
-    });
+    const clinic = await this.createClinicRecord(actor.id, input);
 
     await this.auditService.record({
       actorUserId: actor.id,
@@ -145,11 +140,9 @@ export class ClinicService {
   ) {
     await this.assertCan(actor, "clinic.update", "clinic", clinicId);
     await this.getExistingClinic(clinicId);
+    await this.assertClinicUniqueFields(input, clinicId);
 
-    const clinic = await this.prisma.clinic.update({
-      where: { id: clinicId },
-      data: this.mapClinicUpdateInput(input)
-    });
+    const clinic = await this.updateClinicRecord(clinicId, input);
 
     await this.auditService.record({
       actorUserId: actor.id,
@@ -619,6 +612,109 @@ export class ClinicService {
     }
 
     return clinic;
+  }
+
+  private async createClinicRecord(actorUserId: string, input: CreateClinicInput) {
+    try {
+      return await this.prisma.clinic.create({
+        data: {
+          ...this.mapClinicCreateInput(input),
+          status: ClinicStatus.DRAFT,
+          createdByUserId: actorUserId
+        }
+      });
+    } catch (error) {
+      this.throwClinicUniqueConflict(error);
+      throw error;
+    }
+  }
+
+  private async updateClinicRecord(clinicId: string, input: UpdateClinicInput) {
+    try {
+      return await this.prisma.clinic.update({
+        where: { id: clinicId },
+        data: this.mapClinicUpdateInput(input)
+      });
+    } catch (error) {
+      this.throwClinicUniqueConflict(error);
+      throw error;
+    }
+  }
+
+  private async assertClinicUniqueFields(
+    input: Partial<Pick<CreateClinicInput, "slug" | "email" | "phone">>,
+    excludeClinicId?: string
+  ) {
+    const checks = [
+      ...(input.slug ? [{ field: "slug" as const, value: input.slug }] : []),
+      ...(input.email ? [{ field: "email" as const, value: input.email }] : []),
+      ...(input.phone ? [{ field: "phone" as const, value: input.phone }] : [])
+    ];
+
+    if (!checks.length) {
+      return;
+    }
+
+    const existing = await this.prisma.clinic.findFirst({
+      where: {
+        deletedAt: null,
+        ...(excludeClinicId ? { id: { not: excludeClinicId } } : {}),
+        OR: checks.map((check) => ({ [check.field]: check.value }))
+      },
+      select: {
+        slug: true,
+        email: true,
+        phone: true
+      }
+    });
+
+    if (!existing) {
+      return;
+    }
+
+    if (input.slug && existing.slug === input.slug) {
+      throw new ConflictException("Clinic slug already exists. Use a different slug.");
+    }
+
+    if (input.email && existing.email === input.email) {
+      throw new ConflictException("Clinic email already exists. Use a different email address.");
+    }
+
+    if (input.phone && existing.phone === input.phone) {
+      throw new ConflictException("Clinic phone number already exists. Use a different phone number.");
+    }
+  }
+
+  private throwClinicUniqueConflict(error: unknown) {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") {
+      return;
+    }
+
+    const target = this.getDatabaseErrorTarget(error);
+
+    if (target.includes("clinics_slug_active_uidx") || target.includes("slug")) {
+      throw new ConflictException("Clinic slug already exists. Use a different slug.");
+    }
+
+    if (target.includes("email")) {
+      throw new ConflictException("Clinic email already exists. Use a different email address.");
+    }
+
+    if (target.includes("phone")) {
+      throw new ConflictException("Clinic phone number already exists. Use a different phone number.");
+    }
+
+    throw new ConflictException("Clinic already exists with one of these unique values.");
+  }
+
+  private getDatabaseErrorTarget(error: Prisma.PrismaClientKnownRequestError) {
+    const rawTarget = error.meta?.target;
+
+    if (Array.isArray(rawTarget)) {
+      return rawTarget.join(",");
+    }
+
+    return `${String(rawTarget ?? "")} ${String(error.meta?.message ?? "")} ${error.message}`;
   }
 
   private async getExistingLocation(clinicId: string, locationId: string) {

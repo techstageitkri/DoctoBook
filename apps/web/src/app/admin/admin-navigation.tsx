@@ -27,6 +27,7 @@ import {
   UsersRound,
   WalletCards
 } from "lucide-react";
+import { isAdminDemoMode } from "./admin-demo-mode";
 
 export type AdminPermission =
   | "dashboard.read"
@@ -171,6 +172,16 @@ export const adminNavigation: AdminNavGroup[] = [
   }
 ];
 
+export function getAdminNavigation() {
+  if (!isAdminDemoMode()) {
+    return adminNavigation;
+  }
+
+  const visibleGroups = new Set(["Clinics", "Doctors", "Services"]);
+
+  return adminNavigation.filter((group) => visibleGroups.has(group.label));
+}
+
 const clinicAdminPermissions = new Set<AdminPermission>([
   "dashboard.read",
   "clinic.read",
@@ -196,7 +207,7 @@ export function hasAdminAccess(roles: string[]) {
 }
 
 export function activeNavigationGroup(pathname: string) {
-  return adminNavigation.find((group) =>
+  return getAdminNavigation().find((group) =>
     group.items.some((item) => item.href === pathname || (item.href !== "/admin" && pathname.startsWith(`${item.href}/`)))
   )?.label;
 }

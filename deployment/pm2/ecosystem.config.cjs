@@ -72,7 +72,8 @@ module.exports = {
         WEB_HOST: webHost,
         WEB_PORT: webPort,
         NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || "https://doctobook.example.com",
-        WEB_PUBLIC_URL: process.env.WEB_PUBLIC_URL || "https://doctobook-staging.techstageit.com"
+        WEB_PUBLIC_URL: process.env.WEB_PUBLIC_URL || "https://doctobook-staging.techstageit.com",
+        NEXT_PUBLIC_ADMIN_DEMO_MODE: process.env.NEXT_PUBLIC_ADMIN_DEMO_MODE || envFile.NEXT_PUBLIC_ADMIN_DEMO_MODE || "false"
       }
     },
     {

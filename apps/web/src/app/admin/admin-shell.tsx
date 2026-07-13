@@ -28,12 +28,13 @@ import {
 } from "react";
 import {
   activeNavigationGroup,
-  adminNavigation,
   breadcrumbLabels,
+  getAdminNavigation,
   hasAdminAccess,
   hasAdminPermission,
   type AdminPermission
 } from "./admin-navigation";
+import { isAdminDemoMode, isAdminDemoPath } from "./admin-demo-mode";
 import { ToastProvider } from "./admin-ui";
 
 type SessionUser = { id: string; email: string | null; fullName: string; roles: string[] };
@@ -62,6 +63,8 @@ export function AdminShell({ apiUrl, appName, children }: { apiUrl: string; appN
   const [profileOpen, setProfileOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const navigation = useMemo(() => getAdminNavigation(), []);
+  const demoMode = isAdminDemoMode();
   const activeGroup = activeNavigationGroup(pathname) ?? "Dashboard";
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set([activeGroup]));
   const profileRef = useRef<HTMLDivElement>(null);
@@ -142,7 +145,7 @@ export function AdminShell({ apiUrl, appName, children }: { apiUrl: string; appN
     event.preventDefault();
     const term = search.trim().toLowerCase();
     if (!term || !session) return;
-    const item = adminNavigation.flatMap((group) => group.items).find((candidate) => hasAdminPermission(session.user.roles, candidate.permission) && candidate.label.toLowerCase().includes(term));
+    const item = navigation.flatMap((group) => group.items).find((candidate) => hasAdminPermission(session.user.roles, candidate.permission) && candidate.label.toLowerCase().includes(term));
     if (item) { router.push(item.href); setSearch(""); }
   }
 
@@ -192,7 +195,7 @@ export function AdminShell({ apiUrl, appName, children }: { apiUrl: string; appN
         <button aria-label="Close navigation" className="admin-v2-mobile-close" onClick={() => setMobileOpen(false)} type="button"><X size={20} /></button>
       </div>
       <nav aria-label="Super Admin navigation" className="admin-v2-nav">
-        {adminNavigation.map((group) => {
+        {navigation.map((group) => {
           const visible = group.items.filter((item) => hasAdminPermission(session.user.roles, item.permission));
           if (!visible.length) return null;
           const open = expandedGroups.has(group.label);
@@ -228,21 +231,45 @@ export function AdminShell({ apiUrl, appName, children }: { apiUrl: string; appN
               </div>
               <form className="admin-v2-global-search" onSubmit={submitSearch}><Search size={17} /><input aria-label="Global search" onChange={(event) => setSearch(event.target.value)} placeholder="Search admin sections…" value={search} /></form>
               <div className="admin-v2-header-actions">
-                <div className="admin-v2-popover-wrap">
+                {!demoMode && <div className="admin-v2-popover-wrap">
                   <button aria-expanded={notificationsOpen} aria-label="Notifications" className="admin-v2-icon-button" onClick={() => setNotificationsOpen((current) => !current)} type="button"><Bell size={19} /><span className="admin-v2-notification-dot" /></button>
                   {notificationsOpen && <div className="admin-v2-popover admin-v2-notification-popover"><strong>Notifications</strong><p>No new administrative alerts.</p><Link href="/admin/notifications/logs" onClick={() => setNotificationsOpen(false)}>View delivery logs</Link></div>}
-                </div>
+                </div>}
                 <div className="admin-v2-profile" ref={profileRef}>
                   <button aria-expanded={profileOpen} onClick={() => setProfileOpen((current) => !current)} type="button"><span className="admin-v2-avatar"><UserRound size={17} /></span><span className="admin-v2-profile-copy"><strong>{session.user.fullName}</strong><small>{session.user.roles.includes("super_admin") ? "Super Administrator" : "Clinic Administrator"}</small></span><ChevronDown size={15} /></button>
                   {profileOpen && <div className="admin-v2-popover admin-v2-profile-menu"><div><strong>{session.user.fullName}</strong><span>{session.user.email}</span></div><button onClick={() => void handleLogout()} type="button"><LogOut size={16} />Sign out</button></div>}
                 </div>
               </div>
             </header>
-            <main className="admin-v2-content">{children}</main>
+            <main className="admin-v2-content">{isAdminDemoPath(pathname) ? children : <AdminDemoHiddenRoute />}</main>
           </div>
         </div>
       </ToastProvider>
     </AdminSessionContext.Provider>
+  );
+}
+
+function AdminDemoHiddenRoute() {
+  return (
+    <>
+      <div className="admin-v2-page-header">
+        <div>
+          <p>Admin demo</p>
+          <h1>Demo area limited</h1>
+          <span>This staging walkthrough is focused on clinics, doctors, and services.</span>
+        </div>
+      </div>
+      <section className="admin-v2-card admin-v2-capability-gap">
+        <span className="admin-v2-brand-mark"><ShieldCheck size={23} /></span>
+        <h2>Available demo sections</h2>
+        <p>Use the sidebar to continue with clinic setup, doctor registration, and service configuration.</p>
+        <div className="admin-v2-section-actions">
+          <Link className="primary-button" href="/admin/clinics">Clinics</Link>
+          <Link className="primary-button" href="/admin/doctors">Doctors</Link>
+          <Link className="primary-button" href="/admin/services">Services</Link>
+        </div>
+      </section>
+    </>
   );
 }
 

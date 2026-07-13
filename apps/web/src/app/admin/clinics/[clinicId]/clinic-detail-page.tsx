@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Building2, CalendarDays, Clock3, ExternalLink, MapPin, Plus, Save, Trash2, UserCog } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { isAdminDemoMode } from "../../admin-demo-mode";
 import { AdminReportsView } from "../../admin-reports-view";
 import { useAdminSession } from "../../admin-shell";
 import { ConfirmDialog, EmptyState, FormSection, LoadingSkeleton, PageHeader, StatusBadge, Tabs, useToast } from "../../admin-ui";
@@ -21,7 +22,9 @@ export function ClinicDetailPage({ clinicId, tab = "overview" }: { clinicId: str
   useEffect(() => { void load(); }, [load]);
   const selectedLocation = locations.find((location) => location.id === selectedLocationId) ?? null;
   const base = `/admin/clinics/${clinicId}`;
-  const tabs = [{ href: base, label: "Summary" }, { href: `${base}/locations`, label: "Locations" }, { href: `${base}/hours`, label: "Operating hours" }, { href: `${base}/closures`, label: "Closures" }, { href: `${base}/administrators`, label: "Administrators" }, { href: `${base}/services`, label: "Services" }, { href: `${base}/doctors`, label: "Doctors" }, { href: `${base}/reports`, label: "Reports" }];
+  const fullTabs = [{ href: base, label: "Summary" }, { href: `${base}/locations`, label: "Locations" }, { href: `${base}/hours`, label: "Operating hours" }, { href: `${base}/closures`, label: "Closures" }, { href: `${base}/administrators`, label: "Administrators" }, { href: `${base}/services`, label: "Services" }, { href: `${base}/doctors`, label: "Doctors" }, { href: `${base}/reports`, label: "Reports" }];
+  const demoTabs = [{ href: base, label: "Summary" }, { href: `${base}/locations`, label: "Locations" }, { href: `${base}/services`, label: "Services" }, { href: `${base}/doctors`, label: "Doctors" }];
+  const tabs = isAdminDemoMode() ? demoTabs : fullTabs;
   const activeHref = tab === "overview" ? base : `${base}/${tab}`;
 
   async function executeConfirm() { if (!confirmAction) return; setBusy(true); try { await confirmAction.run(); showToast(`${confirmAction.label} completed`); setConfirmAction(null); await load(); } catch (actionError) { setError(actionError instanceof Error ? actionError.message : "Action failed"); } finally { setBusy(false); } }

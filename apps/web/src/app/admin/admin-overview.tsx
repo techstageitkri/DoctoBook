@@ -1,19 +1,28 @@
 "use client";
 
 import Link from "next/link";
-import { Activity, ArrowRight, Building2, CalendarDays, CircleAlert, Stethoscope } from "lucide-react";
+import { Activity, ArrowRight, Building2, CalendarDays, CircleAlert, HeartPulse, Stethoscope } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { isAdminDemoMode } from "./admin-demo-mode";
 import { useAdminSession } from "./admin-shell";
 import { EmptyState, LoadingSkeleton, MetricCard, PageHeader, StatusBadge } from "./admin-ui";
 import type { Clinic, Doctor } from "./admin-types";
 
 export function AdminOverview() {
-  const { apiRequest, user } = useAdminSession();
+  if (isAdminDemoMode()) {
+    return <AdminDemoOverview />;
+  }
+
+  return <AdminFullOverview />;
+}
+
+function AdminFullOverview() {
   const [clinics, setClinics] = useState<Clinic[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [summary, setSummary] = useState<{ totalAppointments?: number; completedAppointments?: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const { apiRequest, user } = useAdminSession();
 
   useEffect(() => {
     const from = new Date(); from.setDate(from.getDate() - 30);
@@ -62,4 +71,42 @@ export function AdminOverview() {
       </section>
     </>}
   </>;
+}
+
+function AdminDemoOverview() {
+  return (
+    <>
+      <PageHeader
+        eyebrow="Admin demo"
+        title="DoctoBook setup workspace"
+        description="Manage the core marketplace setup for clinics, doctors, and services."
+        actions={<Link className="primary-button" href="/admin/clinics/new">Create clinic</Link>}
+      />
+      <section className="admin-v2-metric-grid" aria-label="Demo admin areas">
+        <MetricCard icon={<Building2 size={18} />} label="Clinics" value="Manage" detail="Create clinics, branches, addresses, and locations" />
+        <MetricCard icon={<Stethoscope size={18} />} label="Doctors" value="Manage" detail="Register doctors, review profiles, and assign clinics" />
+        <MetricCard icon={<HeartPulse size={18} />} label="Services" value="Manage" detail="Configure services, fees, and clinic offerings" />
+      </section>
+      <section className="admin-v2-dashboard-grid">
+        <div className="admin-v2-card">
+          <div className="admin-v2-card-header">
+            <div><h2>Clinic setup</h2><p>Create and organize clinic branches before assigning doctors.</p></div>
+          </div>
+          <div className="admin-v2-list">
+            <Link href="/admin/clinics/new"><span className="admin-v2-avatar"><Building2 size={17} /></span><span><strong>Create clinic</strong><small>Add clinic identity and contact details</small></span><ArrowRight size={15} /></Link>
+            <Link href="/admin/clinics"><span className="admin-v2-avatar"><Building2 size={17} /></span><span><strong>View clinics</strong><small>Open clinic details, locations, services, and doctors</small></span><ArrowRight size={15} /></Link>
+          </div>
+        </div>
+        <div className="admin-v2-card">
+          <div className="admin-v2-card-header">
+            <div><h2>Doctor and service setup</h2><p>Prepare providers and consultation services for patient search.</p></div>
+          </div>
+          <div className="admin-v2-list">
+            <Link href="/admin/doctors/new"><span className="admin-v2-avatar"><Stethoscope size={17} /></span><span><strong>Register doctor</strong><small>Create a doctor profile and approval record</small></span><ArrowRight size={15} /></Link>
+            <Link href="/admin/services"><span className="admin-v2-avatar"><HeartPulse size={17} /></span><span><strong>Manage services</strong><small>Configure service catalogue and fees</small></span><ArrowRight size={15} /></Link>
+          </div>
+        </div>
+      </section>
+    </>
+  );
 }

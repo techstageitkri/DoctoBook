@@ -11,11 +11,30 @@ export function isAdminDemoPath(pathname: string) {
     return true;
   }
 
-  if (pathname === "/admin/clinics" || pathname === "/admin/clinics/new") {
+  const visibleClinicPages = new Set([
+    "/admin/clinics",
+    "/admin/clinics/new",
+    "/admin/clinics/approvals",
+    "/admin/clinics/locations",
+    "/admin/clinics/hours",
+    "/admin/clinics/closures",
+    "/admin/clinics/administrators"
+  ]);
+
+  if (visibleClinicPages.has(pathname)) {
     return true;
   }
 
-  if (pathname === "/admin/doctors" || pathname === "/admin/doctors/new" || pathname === "/admin/doctors/pending") {
+  const visibleDoctorPages = new Set([
+    "/admin/doctors",
+    "/admin/doctors/new",
+    "/admin/doctors/pending",
+    "/admin/doctors/directory",
+    "/admin/doctors/assignments",
+    "/admin/doctors/documents"
+  ]);
+
+  if (visibleDoctorPages.has(pathname)) {
     return true;
   }
 
@@ -23,6 +42,6 @@ export function isAdminDemoPath(pathname: string) {
     return true;
   }
 
-  return /^\/admin\/clinics\/[0-9a-f-]{20,}(\/(locations|services|doctors))?$/i.test(pathname) ||
+  return /^\/admin\/clinics\/[0-9a-f-]{20,}(\/(locations|hours|closures|administrators|services|doctors))?$/i.test(pathname) ||
     /^\/admin\/doctors\/[0-9a-f-]{20,}(\/(clinic-assignments|documents))?$/i.test(pathname);
 }

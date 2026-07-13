@@ -23,7 +23,15 @@ export function ClinicDetailPage({ clinicId, tab = "overview" }: { clinicId: str
   const selectedLocation = locations.find((location) => location.id === selectedLocationId) ?? null;
   const base = `/admin/clinics/${clinicId}`;
   const fullTabs = [{ href: base, label: "Summary" }, { href: `${base}/locations`, label: "Locations" }, { href: `${base}/hours`, label: "Operating hours" }, { href: `${base}/closures`, label: "Closures" }, { href: `${base}/administrators`, label: "Administrators" }, { href: `${base}/services`, label: "Services" }, { href: `${base}/doctors`, label: "Doctors" }, { href: `${base}/reports`, label: "Reports" }];
-  const demoTabs = [{ href: base, label: "Summary" }, { href: `${base}/locations`, label: "Locations" }, { href: `${base}/services`, label: "Services" }, { href: `${base}/doctors`, label: "Doctors" }];
+  const demoTabs = [
+    { href: base, label: "Summary" },
+    { href: `${base}/locations`, label: "Locations" },
+    { href: `${base}/hours`, label: "Operating hours" },
+    { href: `${base}/closures`, label: "Closures" },
+    { href: `${base}/administrators`, label: "Administrators" },
+    { href: `${base}/services`, label: "Services" },
+    { href: `${base}/doctors`, label: "Doctors" }
+  ];
   const tabs = isAdminDemoMode() ? demoTabs : fullTabs;
   const activeHref = tab === "overview" ? base : `${base}/${tab}`;
 
